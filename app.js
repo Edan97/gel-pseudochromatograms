@@ -58,6 +58,8 @@
 
   // ------------------------------------------------------------------ URL state
 
+  const latestVersion = () => state.versions.length ? state.versions[state.versions.length - 1].id : null;
+
   function readHash() {
     const p = new URLSearchParams(location.hash.slice(1));
     return {
@@ -67,7 +69,7 @@
   }
   function writeHash() {
     const p = new URLSearchParams();
-    p.set("v", state.version);
+    if (state.version !== latestVersion()) p.set("v", state.version);
     p.set("l", state.selected.join("|"));
     p.set("c", state.colourBy);
     if (state.ymax !== "auto") p.set("y", state.ymax);
@@ -711,8 +713,8 @@
   async function loadVersion(v, keepSelection) {
     const base = `data/${v}/`;
     const [data, bands] = await Promise.all([
-      fetch(base + "data.json").then((r) => r.json()),
-      fetch(base + "bands.json").then((r) => (r.ok ? r.json() : null)),
+      fetch(base + "data.json", { cache: "no-cache" }).then((r) => r.json()),
+      fetch(base + "bands.json", { cache: "no-cache" }).then((r) => (r.ok ? r.json() : null)),
     ]);
     state.version = v;
     state.data = data;
@@ -725,6 +727,11 @@
     start.forEach((id) => toggle(id, true));
     const meta = state.versions.find((x) => x.id === v);
     $("#version-note").textContent = meta ? `${meta.date}${meta.note ? " · " + meta.note : ""}` : "";
+    const newest = latestVersion();
+    const older = $("#older-version");
+    older.hidden = v === newest;
+    if (v !== newest) older.replaceChildren(`You're looking at ${v}, an older version. `,
+      el("button", { onclick: () => { $("#version").value = newest; loadVersion(newest, state.selected.slice()); } }, `Switch to ${newest}`));
     if (bands) renderBands();
     state.activeBand = null;
     state.picked = null;
@@ -739,7 +746,7 @@
   }
 
   async function init() {
-    state.versions = await fetch("versions.json").then((r) => r.json());
+    state.versions = await fetch("versions.json", { cache: "no-cache" }).then((r) => r.json());
     const h = readHash();
     const sel = $("#version");
     sel.replaceChildren(...state.versions.slice().reverse().map((v) => el("option", { value: v.id }, v.id)));
