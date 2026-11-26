@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gel Pseudo-chromatograms</title>
+<meta name="description" content="Streptavidin blot lanes from an in vitro prenylation assay, as traces on a shared kDa axis, with the gel images beside them.">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.35.2/plotly-basic.min.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="title">
+    <h1>Gel pseudo-chromatograms</h1>
+    <p class="sub">Biotin-GPP in vitro prenylation of mouse blood lysates, streptavidin blots. Every lane read as a trace on one kDa axis from its gel's ladder.</p>
+  </div>
+  <div class="top-controls">
+    <label>Version <select id="version"></select></label>
+    <span id="version-note" class="muted"></span>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="lanes-panel" aria-label="Lanes">
+    <div class="panel-head">
+      <h2>Lanes</h2>
+      <div class="seg" role="group" aria-label="Filter by genotype">
+        <button data-geno="all" class="on">All</button>
+        <button data-geno="MUT">Defect</button>
+        <button data-geno="HET">No defect</button>
+      </div>
+      <div class="row-btns">
+        <button id="sel-shown">Select shown</button>
+        <button id="sel-none">Clear</button>
+      </div>
+    </div>
+    <div id="lane-groups"></div>
+  </aside>
+
+  <section class="main">
+    <div class="card">
+      <div class="controls">
+        <label>Colour by
+          <select id="colour-by">
+            <option value="defect">Defect (red) / no defect (blue)</option>
+            <option value="lane">Each lane</option>
+          </select>
+        </label>
+        <label>Height
+          <select id="ymax">
+            <option value="auto">Fit to lanes</option>
+            <option value="1">0 to 1 (saturated)</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="show-bands" checked> Band zones</label>
+        <button id="reset-zoom">Reset zoom</button>
+      </div>
+      <div id="plot" class="plot"></div>
+      <p class="muted small" id="plot-note">Height = a fraction of a saturated pixel on the same image, above the lane's local background (1 = saturated; a flat top means saturated). Compare heights within one gel; between gels, sizes hold to about 5–10%. Drag to zoom, double-click to reset.</p>
+      <div id="legend" class="legend" aria-label="Legend"></div>
+    </div>
+
+    <div class="card">
+      <div class="gel-head">
+        <h2>Gel images</h2>
+        <div id="gel-tabs" class="tabs" role="tablist"></div>
+      </div>
+      <p class="muted small">Click a lane to add or remove it. Shaded columns are the pixels averaged into each trace; orange ticks are the ladder bands as found. Hovering over the plot marks that size in each selected lane of this gel.</p>
+      <div id="gel-view" class="gel-view"></div>
+      <details class="gel-side">
+        <summary>Notebook notes for this gel</summary>
+        <div id="gel-notes"></div>
+      </details>
+    </div>
+
+    <div class="card">
+      <h2>Bands</h2>
+      <p class="muted small" id="bands-caption"></p>
+      <div class="table-scroll"><table id="bands-table" class="tbl"></table></div>
+      <p class="muted small">Click a band to zoom the plot to it.</p>
+    </div>
+
+    <div class="card">
+      <h2>Selected lanes</h2>
+      <p class="muted small">Each legend line and the lane it comes from, with every field recorded for it.</p>
+      <div class="table-scroll"><table id="lanes-table" class="tbl"></table></div>
+    </div>
+  </section>
+</main>
+<footer class="muted small">
+  Made with <code>pseudochrom.py</code>: ladder (Precision Plus, 250–10 kDa) fitted per gel, lanes aligned on shared endogenous bands, background removed. Unpublished optimisation data.
+</footer>
+<script src="app.js"></script>
+</body>
+</html>

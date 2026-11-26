@@ -1,0 +1,434 @@
+/* Gel pseudo-chromatograms: pick lanes, see their traces on one kDa axis and where they sit on the gel. */
+(() => {
+  "use strict";
+
+  const LANE_HUES = {
+    light: ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"],
+    dark: ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#0ca30c", "#9085e9", "#e66767"],
+  };
+  // line style marks what was done differently to a lane (as in pseudochrom.py)
+  const DASHES = [["no CPI", "dash"], ["vehicle", "dash"], ["bead eluate", "dash"], ["−REP1", "dash"],
+                  ["−RabGGTase", "dot"], ["−B-GPP", "dashdot"]];
+  const KIND_LABEL = { endogenous: "endogenous biotinylated", reagent: "from the reaction mix?",
+                       reaction: "reaction product", rab: "Rab-like product", odd: "biotin-GPP, no enzyme" };
+
+  // ladder sizes plus a few in between, so a zoomed-in axis still has numbers
+  const TICKS = [250, 200, 150, 120, 100, 75, 60, 50, 40, 37, 30, 25, 20, 17, 15, 12, 10];
+
+  const $ = (s) => document.querySelector(s);
+  const el = (tag, attrs = {}, ...kids) => {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === "class") e.className = v;
+      else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+      else if (v !== null && v !== undefined && v !== false) e.setAttribute(k, v === true ? "" : v);
+    }
+    for (const k of kids.flat()) if (k !== null && k !== undefined) e.append(k.nodeType ? k : String(k));
+    return e;
+  };
+  const SVG = "http://www.w3.org/2000/svg";
+  const sv = (tag, attrs = {}) => {
+    const e = document.createElementNS(SVG, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    return e;
+  };
+
+  const state = {
+    versions: [], version: null, data: null, bands: null,
+    selected: [],           // lane ids, in the order picked
+    slots: new Map(),       // lane id -> colour slot (each-lane colouring), kept while selected
+    geno: "all", colourBy: "defect", ymax: "auto", showBands: true,
+    gel: null, activeBand: null, hoverKda: null,
+  };
+
+  const dark = () => {
+    const t = document.documentElement.dataset.theme;
+    if (t) return t === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const laneById = (id) => state.data.lanes.find((l) => l.id === id);
+  const gelById = (id) => state.data.gels.find((g) => g.id === id);
+  const fmtKda = (k) => (k >= 100 ? k.toFixed(0) : k >= 10 ? k.toFixed(0) : k.toFixed(1));
+
+  // ------------------------------------------------------------------ URL state
+
+  function readHash() {
+    const p = new URLSearchParams(location.hash.slice(1));
+    return {
+      v: p.get("v"), l: p.get("l") ? p.get("l").split("|").filter(Boolean) : null,
+      c: p.get("c"), g: p.get("g"), y: p.get("y"),
+    };
+  }
+  function writeHash() {
+    const p = new URLSearchParams();
+    p.set("v", state.version);
+    p.set("l", state.selected.join("|"));
+    p.set("c", state.colourBy);
+    if (state.ymax !== "auto") p.set("y", state.ymax);
+    if (state.gel) p.set("g", state.gel);
+    history.replaceState(null, "", "#" + p.toString());
+  }
+
+  // ------------------------------------------------------------------ colours
+
+  function dilutionFold(meta) {
+    const d = (meta.dilution || "neat").toLowerCase();
+    const m = d.match(/1\s*in\s*(\d+)/);
+    return m ? +m[1] : 1;
+  }
+  function laneStyle(lane) {
+    let dash = "solid";
+    for (const [k, d] of DASHES) if (lane.legend.includes(k)) dash = d;
+    if (state.colourBy === "lane") {
+      const slot = state.slots.get(lane.id) ?? 0;
+      const hues = LANE_HUES[dark() ? "dark" : "light"];
+      return { color: hues[slot % 8], dash: slot >= 8 ? "dot" : "solid" };
+    }
+    // defect colouring: reds for the defect, blues without; darker = more lysate
+    const g = lane.meta.genotype === "MUT" ? "mut" : "het";
+    const same = state.selected.map(laneById).filter((l) => (l.meta.genotype === "MUT" ? "mut" : "het") === g);
+    const folds = [...new Set(same.map((l) => dilutionFold(l.meta)))].sort((a, b) => a - b);
+    const rank = Math.min(3, folds.indexOf(dilutionFold(lane.meta)));
+    return { color: cssVar(`--${g}-${Math.max(0, rank) + 1}`), dash };
+  }
+  function assignSlot(id) {
+    if (state.slots.has(id)) return;
+    const used = new Set(state.slots.values());
+    let s = 0;
+    while (used.has(s)) s++;
+    state.slots.set(id, s);
+  }
+
+  // ------------------------------------------------------------------ selection
+
+  function toggle(id, on) {
+    const has = state.selected.includes(id);
+    if (on === undefined) on = !has;
+    if (on && !has) { state.selected.push(id); assignSlot(id); }
+    if (!on && has) { state.selected = state.selected.filter((x) => x !== id); state.slots.delete(id); }
+  }
+  function changed() {
+    renderLaneList();
+    renderPlot();
+    renderGel();
+    renderLaneTable();
+    writeHash();
+  }
+
+  // ------------------------------------------------------------------ lane list
+
+  function renderLaneList() {
+    const box = $("#lane-groups");
+    box.replaceChildren();
+    for (const g of state.data.gels) {
+      const lanes = state.data.lanes.filter((l) => l.gel === g.id);
+      const shown = lanes.filter((l) => state.geno === "all" || l.meta.genotype === state.geno);
+      const head = el("div", { class: "group-head" },
+        el("span", {}, el("b", {}, g.name), " ", el("span", { class: "when" }, g.when)),
+        el("span", {},
+          el("button", { title: "Show this gel", onclick: () => { state.gel = g.id; renderGel(); writeHash(); $("#gel-view").scrollIntoView({ behavior: "smooth", block: "nearest" }); } }, "gel"),
+          " ",
+          el("button", { title: "Select every shown lane of this gel", onclick: () => { shown.forEach((l) => toggle(l.id, true)); changed(); } }, "all"),
+          " ",
+          el("button", { title: "Remove this gel's lanes", onclick: () => { lanes.forEach((l) => toggle(l.id, false)); changed(); } }, "none")));
+      const grp = el("div", { class: "group" }, head);
+      for (const l of lanes) {
+        const on = state.selected.includes(l.id);
+        const st = on ? laneStyle(l) : null;
+        const sw = el("span", { class: "sw" });
+        if (st) { sw.style.background = "none"; sw.style.borderTop = `3px ${st.dash === "solid" ? "solid" : st.dash === "dot" ? "dotted" : "dashed"} ${st.color}`; }
+        const row = el("label", { class: "lane" + (shown.includes(l) ? "" : " hidden"), title: `${g.name}: lane "${l.name}"` },
+          el("input", { type: "checkbox", checked: on, onchange: (e) => { toggle(l.id, e.target.checked); changed(); } }),
+          sw,
+          el("span", {}, l.legend, l.detail ? el("span", { class: "det" }, ` · ${l.detail}`) : null));
+        grp.append(row);
+      }
+      box.append(grp);
+    }
+  }
+
+  // ------------------------------------------------------------------ plot
+
+  function bandShapes() {
+    if (!state.showBands || !state.bands) return [];
+    return state.bands.bands.map((b, i) => ({
+      type: "rect", xref: "x", yref: "paper", x0: b.lo, x1: b.hi, y0: 0, y1: 1,
+      fillcolor: i === state.activeBand ? cssVar("--zone-hi") : cssVar("--zone"), line: { width: 0 }, layer: "below",
+    }));
+  }
+  function bandLabels() {
+    if (!state.showBands || !state.bands || $("#plot").clientWidth < 600) return [];
+    const B = state.bands.bands;
+    return B.map((b, i) => ({
+      x: Math.log10(Math.sqrt(b.lo * b.hi)), xref: "x", y: 1, yref: "paper", yanchor: "bottom", xanchor: "center",
+      // a band close to the one before it is labelled on its own side so the two don't overlap
+      xshift: i > 0 && Math.log10(B[i - 1].kda / b.kda) < 0.06 ? 10 : i < B.length - 1 && Math.log10(b.kda / B[i + 1].kda) < 0.06 ? -10 : 0,
+      text: `~${b.kda}`, showarrow: false, font: { size: 10, color: cssVar("--muted") },
+    }));
+  }
+
+  function renderPlot(keepRange = true) {
+    const d = state.data;
+    const lanes = state.selected.map(laneById).filter(Boolean);
+    const traces = lanes.map((l) => {
+      const st = laneStyle(l);
+      const g = gelById(l.gel);
+      return {
+        type: "scatter", mode: "lines", x: d.kda, y: l.y, name: l.legend,
+        line: { color: st.color, width: 2, dash: st.dash },
+        hovertemplate: `%{y:.3f}  <span style="opacity:.7">${g.name}</span><extra>${l.legend}</extra>`,
+        connectgaps: false,
+      };
+    });
+    const ink = cssVar("--text-2"), grid = cssVar("--grid");
+    const plot = $("#plot");
+    const narrow = plot.clientWidth < 600;
+    const cur = plot.layout && keepRange ? plot.layout.xaxis.range : null;
+    const layout = {
+      margin: { l: 56, r: 14, t: 22, b: 46 },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif", size: 12, color: ink },
+      showlegend: false, hovermode: "x unified",
+      hoverlabel: { bgcolor: cssVar("--surface"), bordercolor: cssVar("--border"), font: { color: cssVar("--text") } },
+      xaxis: {
+        type: "log", range: cur || [Math.log10(300), Math.log10(9)],
+        tickvals: narrow ? d.ladder_kda : TICKS, ticktext: (narrow ? d.ladder_kda : TICKS).map(String), tickangle: 0,
+        title: { text: narrow ? "kDa (from each gel's ladder)" : "apparent mass (kDa, from each gel's ladder)", standoff: 8 },
+        gridcolor: grid, zeroline: false, showline: true, linecolor: grid,
+        hoverformat: ".1f", showspikes: true, spikemode: "across", spikethickness: 1, spikecolor: ink, spikedash: "dot",
+      },
+      yaxis: {
+        title: { text: "fraction of saturation" }, gridcolor: grid, zeroline: true, zerolinecolor: grid,
+        rangemode: "tozero", range: state.ymax === "1" ? [0, 1.03] : undefined, autorange: state.ymax !== "1",
+      },
+      shapes: bandShapes(), annotations: bandLabels(),
+    };
+    Plotly.react(plot, traces, layout, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d"] });
+    if (!plot._hooked) {
+      plot._hooked = true;
+      plot.on("plotly_hover", (ev) => { state.hoverKda = ev.points?.[0]?.x ?? null; drawHoverMarks(); });
+      plot.on("plotly_unhover", () => { state.hoverKda = null; drawHoverMarks(); });
+      plot.on("plotly_doubleclick", () => { state.activeBand = null; renderBandRows(); });
+    }
+    renderLegend(lanes);
+  }
+
+  function renderLegend(lanes) {
+    const box = $("#legend");
+    box.replaceChildren();
+    if (!lanes.length) { box.append(el("span", { class: "muted" }, "No lanes selected: pick some on the left or click lanes on a gel.")); return; }
+    for (const l of lanes) {
+      const st = laneStyle(l);
+      const i = el("i");
+      i.style.borderTopColor = st.color;
+      i.style.borderTopStyle = st.dash === "solid" ? "solid" : st.dash === "dot" ? "dotted" : "dashed";
+      box.append(el("span", {}, i, `${l.legend}`, el("span", { class: "muted" }, ` · ${gelById(l.gel).name}`)));
+    }
+  }
+
+  // ------------------------------------------------------------------ gel image
+
+  function rowForKda(gel, lane, kda) {
+    const { rows, logkda } = gel.cal;
+    const t = Math.log10(kda);
+    // logkda falls as rows rise
+    for (let i = 1; i < rows.length; i++) {
+      const a = logkda[i - 1], b = logkda[i];
+      if ((a >= t && t >= b) || (a <= t && t <= b)) {
+        const f = (t - a) / (b - a || 1);
+        const rLad = rows[i - 1] + f * (rows[i] - rows[i - 1]);
+        return lane ? (rLad - lane.map[1]) / lane.map[0] : rLad;
+      }
+    }
+    return null;
+  }
+
+  function renderGel() {
+    const d = state.data;
+    if (!state.gel || !gelById(state.gel)) state.gel = d.gels[0].id;
+    const tabs = $("#gel-tabs");
+    tabs.replaceChildren(...d.gels.map((g) => el("button", {
+      role: "tab", class: g.id === state.gel ? "on" : "", "aria-selected": g.id === state.gel ? "true" : "false",
+      onclick: () => { state.gel = g.id; renderGel(); writeHash(); },
+    }, g.name)));
+
+    const g = gelById(state.gel);
+    const view = $("#gel-view");
+    let img = view.querySelector("img");
+    const src = `data/${state.version}/${g.image}`;
+    if (!img || img.dataset.src !== src) {
+      view.replaceChildren();
+      img = el("img", { src, alt: `${g.name} (${g.when}): streptavidin blot`, "data-src": src });
+      view.append(img);
+    }
+    view.querySelector("svg")?.remove();
+    const svg = sv("svg", { viewBox: `0 0 ${g.width} ${g.height}`, preserveAspectRatio: "none" });
+    const [r0, r1] = g.rows;
+    const lx = g.ladder.x;
+    const fs = Math.max(10, g.width / 70);
+    for (const b of g.ladder.bands) {
+      const tick = sv("line", { x1: lx[0] - 6, x2: lx[1] + 2, y1: b.row, y2: b.row, stroke: cssVar("--ladder"), "stroke-width": Math.max(1.5, g.width / 600) });
+      const tt = sv("title");
+      tt.textContent = `ladder ${b.kda} kDa`;
+      tick.append(tt);
+      svg.append(tick);
+    }
+    const lanes = d.lanes.filter((l) => l.gel === g.id);
+    for (const l of lanes) {
+      const on = state.selected.includes(l.id);
+      const st = on ? laneStyle(l) : null;
+      const rect = sv("rect", {
+        class: "lanebox", x: l.cols[0], y: r0, width: l.cols[1] - l.cols[0], height: r1 - r0,
+        fill: on ? st.color : "#2a78d6", "fill-opacity": on ? 0.18 : 0.06,
+        stroke: on ? st.color : "#2a78d6", "stroke-opacity": on ? 1 : 0.35, "stroke-width": Math.max(1.5, g.width / (on ? 300 : 700)),
+      });
+      const title = sv("title");
+      title.textContent = `${l.legend}${l.detail ? " · " + l.detail : ""}\n(lane "${l.name}") – click to ${on ? "remove" : "add"}`;
+      rect.append(title);
+      rect.addEventListener("click", () => { toggle(l.id); changed(); });
+      svg.append(rect);
+    }
+    svg.append(sv("g", { id: "hover-marks" }));
+    view.append(svg);
+    drawHoverMarks();
+    renderGelNotes(g);
+  }
+
+  function drawHoverMarks() {
+    const grp = document.getElementById("hover-marks");
+    if (!grp) return;
+    grp.replaceChildren();
+    const g = gelById(state.gel);
+    if (!state.hoverKda || !g) return;
+    const lanes = state.selected.map(laneById).filter((l) => l && l.gel === g.id);
+    for (const l of lanes) {
+      const r = rowForKda(g, l, state.hoverKda);
+      if (r === null) continue;
+      const pad = (l.cols[1] - l.cols[0]) * 0.4;
+      const w = Math.max(2, g.width / 220);
+      grp.append(sv("line", { x1: l.cols[0] - pad, x2: l.cols[1] + pad, y1: r, y2: r, stroke: "#fff", "stroke-width": w * 2.2 }));
+      grp.append(sv("line", { x1: l.cols[0] - pad, x2: l.cols[1] + pad, y1: r, y2: r, stroke: laneStyle(l).color, "stroke-width": w }));
+    }
+    const rl = rowForKda(g, null, state.hoverKda);
+    if (rl !== null) {
+      const t = sv("text", { x: g.ladder.x[1] + 4, y: rl, "dominant-baseline": "middle", "font-size": Math.max(10, g.width / 60), fill: "#111", "paint-order": "stroke", stroke: "#fff", "stroke-width": 3 });
+      t.textContent = `${fmtKda(state.hoverKda)} kDa`;
+      grp.append(t);
+    }
+  }
+
+  function renderGelNotes(g) {
+    const box = $("#gel-notes");
+    box.replaceChildren(el("h3", {}, `${g.name} · ${g.when}`), el("p", {}, g.title));
+    for (const [k, v] of Object.entries(g.notes)) box.append(el("h3", {}, k), el("p", {}, v));
+    if (g.source) box.append(el("h3", {}, "Notebook page"), el("p", { class: "muted" }, g.source));
+  }
+
+  // ------------------------------------------------------------------ tables
+
+  function renderBands() {
+    const t = $("#bands-table");
+    const B = state.bands;
+    $("#bands-caption").textContent = B.caption;
+    t.replaceChildren(el("thead", {}, el("tr", {}, B.columns.map(([, h]) => el("th", {}, h)))), el("tbody"));
+    renderBandRows();
+  }
+  function renderBandRows() {
+    const B = state.bands;
+    const tb = $("#bands-table tbody");
+    tb.replaceChildren(...B.bands.map((b, i) => el("tr", {
+      class: i === state.activeBand ? "on" : "",
+      onclick: () => zoomBand(i),
+    }, B.columns.map(([k]) => el("td", {},
+      k === "kda" ? el("b", {}, `~${b.kda}`) : k === "kind" ? el("span", { class: "kind" }, KIND_LABEL[b.kind] || b.kind) : b[k])))));
+  }
+  function zoomBand(i) {
+    const b = state.bands.bands[i];
+    state.activeBand = state.activeBand === i ? null : i;
+    if (state.activeBand === null) {
+      Plotly.relayout("plot", { "xaxis.range": [Math.log10(300), Math.log10(9)], "yaxis.autorange": state.ymax !== "1", shapes: bandShapes() });
+    } else {
+      Plotly.relayout("plot", { "xaxis.range": [Math.log10(b.hi * 1.35), Math.log10(b.lo / 1.35)], shapes: bandShapes() });
+      $("#plot").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+    renderBandRows();
+  }
+
+  function renderLaneTable() {
+    const t = $("#lanes-table");
+    const lanes = state.selected.map(laneById).filter(Boolean);
+    const fields = ["genotype", "allele", "mice", "blood", "rbc_lysis", "inhibitor", "dilution", "prep", "reaction", "ug", "ug_note"];
+    const heads = ["Legend", "Experiment", "Lane on gel", ...fields.map((f) => f.replace("_", " "))];
+    t.replaceChildren(
+      el("thead", {}, el("tr", {}, heads.map((h) => el("th", {}, h)))),
+      el("tbody", {}, lanes.map((l) => {
+        const g = gelById(l.gel);
+        const st = laneStyle(l);
+        const sw = el("i", { style: `display:inline-block;width:14px;margin-right:6px;vertical-align:middle;border-top:3px ${st.dash === "solid" ? "solid" : st.dash === "dot" ? "dotted" : "dashed"} ${st.color}` });
+        return el("tr", {}, el("td", {}, sw, l.legend), el("td", {}, `${g.name} (${g.when})`), el("td", {}, l.name),
+          fields.map((f) => el("td", {}, l.meta[f] === null || l.meta[f] === undefined ? "" : String(l.meta[f]))));
+      })));
+  }
+
+  // ------------------------------------------------------------------ load
+
+  async function loadVersion(v, keepSelection) {
+    const base = `data/${v}/`;
+    const [data, bands] = await Promise.all([
+      fetch(base + "data.json").then((r) => r.json()),
+      fetch(base + "bands.json").then((r) => (r.ok ? r.json() : null)),
+    ]);
+    state.version = v;
+    state.data = data;
+    state.bands = bands;
+    const ids = new Set(data.lanes.map((l) => l.id));
+    const keep = (keepSelection || []).filter((id) => ids.has(id));
+    state.selected = [];
+    state.slots.clear();
+    const start = keep.length ? keep : ["G2:HET full", "G2:MUT full", "G2:HET no B-GPP", "G2:MUT no B-GPP"].filter((id) => ids.has(id));
+    start.forEach((id) => toggle(id, true));
+    const meta = state.versions.find((x) => x.id === v);
+    $("#version-note").textContent = meta ? `${meta.date}${meta.note ? " · " + meta.note : ""}` : "";
+    if (bands) renderBands();
+    changed();
+  }
+
+  async function init() {
+    state.versions = await fetch("versions.json").then((r) => r.json());
+    const h = readHash();
+    const sel = $("#version");
+    sel.replaceChildren(...state.versions.slice().reverse().map((v) => el("option", { value: v.id }, v.id)));
+    const v = h.v && state.versions.some((x) => x.id === h.v) ? h.v : state.versions[state.versions.length - 1].id;
+    sel.value = v;
+    if (h.c === "lane" || h.c === "defect") state.colourBy = h.c;
+    if (h.y === "1") state.ymax = "1";
+    if (h.g) state.gel = h.g;
+    $("#colour-by").value = state.colourBy;
+    $("#ymax").value = state.ymax;
+
+    sel.addEventListener("change", () => loadVersion(sel.value, state.selected.slice()));
+    $("#colour-by").addEventListener("change", (e) => { state.colourBy = e.target.value; changed(); });
+    $("#ymax").addEventListener("change", (e) => { state.ymax = e.target.value; renderPlot(); writeHash(); });
+    $("#show-bands").addEventListener("change", (e) => { state.showBands = e.target.checked; renderPlot(); });
+    $("#reset-zoom").addEventListener("click", () => { state.activeBand = null; renderBandRows(); renderPlot(false); });
+    $("#sel-none").addEventListener("click", () => { state.selected.slice().forEach((id) => toggle(id, false)); changed(); });
+    $("#sel-shown").addEventListener("click", () => {
+      state.data.lanes.filter((l) => state.geno === "all" || l.meta.genotype === state.geno).forEach((l) => toggle(l.id, true));
+      changed();
+    });
+    document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => {
+      state.geno = b.dataset.geno;
+      document.querySelectorAll(".seg button").forEach((x) => x.classList.toggle("on", x === b));
+      renderLaneList();
+    }));
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (state.data) changed(); });
+
+    await loadVersion(v, h.l);
+  }
+
+  init().catch((e) => {
+    document.querySelector(".main").prepend(el("div", { class: "card" }, `Couldn't load the data: ${e.message}. If you opened index.html from disk, serve the folder instead (python3 -m http.server).`));
+    console.error(e);
+  });
+})();
