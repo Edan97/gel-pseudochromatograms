@@ -44,6 +44,12 @@ made by `export_site.py` beside the analysis script (`pseudochrom.py`):
 
 People's names are removed from the notebook notes on export.
 
+After changing the page itself (`app.js`, `style.css`, `index.html`), run
+`python3 bump_build.py` before committing. Open copies of the page check `build.json` and
+`versions.json` when they load, every five minutes and when the tab comes back into view;
+if either has moved on they show a notice with a Reload button and the hard-refresh keys
+(Ctrl+Shift+R or Ctrl+F5 on Windows, Cmd+Shift+R on a Mac).
+
 ## Caveats
 
 Apparent sizes hold to about 5-10% between gels (one ladder per gel); heights compare

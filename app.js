@@ -2,6 +2,9 @@
 (() => {
   "use strict";
 
+  // which build of the page this is: bump_build.py raises it here, in build.json and in index.html together
+  const BUILD = 10;
+
   // Okabe-Ito, ordered so the faint yellow and the black come last; black becomes light grey on a dark page
   const LANE_HUES = {
     light: ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#F0E442", "#000000"],
@@ -886,7 +889,39 @@
     await loadVersion(v, h.l);
   }
 
-  init().catch((e) => {
+  // ------------------------------------------------------------------ is there a newer page or data?
+
+  // ask the server (past any cache) for the current build and versions; show a notice only when they've moved on
+  let shownVersions = null;
+  async function checkForUpdate() {
+    try {
+      const [b, v] = await Promise.all([
+        fetch("build.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
+        fetch("versions.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
+      ]);
+      if (!shownVersions) shownVersions = state.versions.map((x) => x.id).join(",");
+      const newCode = b && b.build > BUILD;
+      const newData = v && v.map((x) => x.id).join(",") !== shownVersions;
+      if (!newCode && !newData) return;
+      const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+      const box = $("#update-note");
+      box.replaceChildren(
+        el("b", {}, "This page has been updated. "),
+        newData && !newCode ? `A new version (${v[v.length - 1].id}) is available. ` : "",
+        el("button", { onclick: () => location.reload() }, "Reload"),
+        ` If it still looks the same after reloading, your browser is showing a saved copy: do a hard refresh with `,
+        el("kbd", {}, mac ? "Cmd" : "Ctrl"), "+", el("kbd", {}, "Shift"), "+", el("kbd", {}, "R"),
+        ` (${mac ? "on Windows: Ctrl+Shift+R or Ctrl+F5" : "on a Mac: Cmd+Shift+R"}).`,
+        el("button", { class: "close", title: "Dismiss", onclick: () => { box.hidden = true; } }, "×"));
+      box.hidden = false;
+    } catch (e) { /* offline or blocked: say nothing */ }
+  }
+
+  init().then(() => {
+    checkForUpdate();
+    setInterval(checkForUpdate, 5 * 60 * 1000);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) checkForUpdate(); });
+  }).catch((e) => {
     document.querySelector(".main").prepend(el("div", { class: "card" }, `Couldn't load the data: ${e.message}. If you opened index.html from disk, serve the folder instead (python3 -m http.server).`));
     console.error(e);
   });

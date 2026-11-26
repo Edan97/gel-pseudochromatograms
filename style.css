@@ -201,3 +201,10 @@ footer { padding: 0 20px 20px; }
 .ev-uncertain .ev-tag { color: #CC79A7; }
 .unc { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .unc.hi { color: #CC79A7; font-weight: 700; }
+
+/* notice that a newer page or data is on the server */
+.update-note { position: sticky; top: 0; z-index: 20; display: block; line-height: 1.9; padding: 9px 44px 9px 16px; background: #fdf1d6; color: #3a2c00; border-bottom: 1px solid #e6c97a; font-size: 13.5px; }
+.update-note[hidden] { display: none; }
+.update-note button { padding: 1px 10px; margin: 0 4px; }
+.update-note .close { position: absolute; right: 10px; top: 6px; border: none; background: none; font-size: 18px; line-height: 1; color: inherit; }
+.update-note kbd { font: 12px ui-monospace, Menlo, Consolas, monospace; padding: 1px 5px; border: 1px solid #c9ab5e; border-bottom-width: 2px; border-radius: 4px; background: #fffaf0; }
