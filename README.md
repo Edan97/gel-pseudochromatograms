@@ -19,7 +19,9 @@ this folder); opened straight from disk the browser won't load the data.
   - *Selected lanes side by side*: each selected lane cut from its gel next to that
     gel's ladder, all stretched onto one kDa scale so sizes line up across gels.
   - Hovering over the plot marks that size on the gel view.
-- **Bands**: the current reading of each band; click a row to highlight it on the plot
+- **Bands**: the current reading of each band. Each "Best guess" carries footnotes to the
+  papers behind it, with the reference list under the table; "Show evidence" lists what
+  supports it from these gels and from the literature. Click a row to highlight it on the plot
   and the strips (no zoom, so the whole profile stays in view).
 - **Lane details** (folded): each legend line with every recorded field for its lane.
 - The address bar keeps the version, the lanes and the colouring, so a link

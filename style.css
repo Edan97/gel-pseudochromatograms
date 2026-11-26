@@ -141,3 +141,20 @@ footer { padding: 0 20px 20px; }
 .sbs-mark b { position: absolute; left: 0; width: 40px; text-align: right; top: -9px; font-size: 11px; background: var(--surface); color: var(--text); padding: 0 3px; border-radius: 3px; }
 .sbs-zone { position: absolute; left: 44px; background: var(--zone-hi); pointer-events: none; mix-blend-mode: multiply; }
 .sbs-empty { color: var(--muted); padding: 20px 0; }
+
+/* band evidence */
+.fn { font-size: 10px; margin-left: 2px; white-space: nowrap; }
+.fn a, .refs a { color: var(--accent); }
+.ev-btn { padding: 2px 8px; font-size: 12px; white-space: nowrap; }
+#bands-table tbody tr.ev-row { cursor: default; background: var(--bg); }
+#bands-table tbody tr.ev-row:hover { background: var(--bg); }
+.table-scroll { container-type: inline-size; }
+.ev-list { margin: 2px 0; padding-left: 0; list-style: none; display: grid; gap: 6px; position: sticky; left: 8px; max-width: min(95ch, calc(100cqw - 24px)); }
+.ev-list li { display: grid; grid-template-columns: 84px 1fr; gap: 8px; }
+.ev-tag { font-size: 11px; padding-top: 1px; font-weight: 600; color: var(--text-2); }
+.ev-lit .ev-tag { color: var(--accent); }
+.ev-note .ev-tag { color: var(--muted); }
+.refs-head { font-size: 13px; margin: 14px 0 4px; }
+.refs { margin: 0; padding-left: 22px; font-size: 12.5px; display: grid; gap: 3px; }
+.refs li.flash { animation: flash 2s ease-out; }
+@keyframes flash { from { background: var(--zone-hi); } to { background: transparent; } }

@@ -3,5 +3,10 @@
     "id": "v1",
     "date": "2026-11-26",
     "note": "First version: five gels, heights as a fraction of a saturated pixel on each image"
+  },
+  {
+    "id": "v2",
+    "date": "2026-11-26",
+    "note": "Band table with footnoted literature and per-band evidence"
   }
 ]

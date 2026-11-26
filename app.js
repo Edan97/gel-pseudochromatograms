@@ -447,21 +447,69 @@
 
   // ------------------------------------------------------------------ tables
 
+  // references are numbered in the order they're first used: a claim's footnotes, then its evidence
+  function refNumbers() {
+    const B = state.bands, num = new Map();
+    const add = (id) => { if (!num.has(id)) num.set(id, num.size + 1); };
+    for (const b of B.bands) {
+      (b.guess_refs || []).forEach(add);
+      (b.evidence || []).forEach((e) => (e.refs || []).forEach(add));
+    }
+    return num;
+  }
+  const refLinks = (ids) => el("sup", { class: "fn" },
+    "[", ids.flatMap((id, j) => [j ? "," : null, el("a", { href: `#ref-${state.refNum.get(id)}`, onclick: (e) => jumpToRef(e, state.refNum.get(id)) }, String(state.refNum.get(id)))]).filter(Boolean), "]");
+
+  // scroll to a reference without touching the address bar, which holds the view's state
+  function jumpToRef(e, n) {
+    e.preventDefault();
+    e.stopPropagation();
+    const li = document.getElementById(`ref-${n}`);
+    if (!li) return;
+    li.scrollIntoView({ behavior: "smooth", block: "center" });
+    li.classList.remove("flash");
+    void li.offsetWidth;
+    li.classList.add("flash");
+  }
+
   function renderBands() {
     const t = $("#bands-table");
     const B = state.bands;
+    state.refNum = refNumbers();
+    state.openEvidence = new Set();
     $("#bands-caption").textContent = B.caption;
-    t.replaceChildren(el("thead", {}, el("tr", {}, B.columns.map(([, h]) => el("th", {}, h)))), el("tbody"));
+    t.replaceChildren(el("thead", {}, el("tr", {}, B.columns.map(([, h]) => el("th", {}, h)), el("th", {}, ""))), el("tbody"));
     renderBandRows();
+    const refs = (B.references || []).filter((r) => state.refNum.has(r.id)).sort((a, b) => state.refNum.get(a.id) - state.refNum.get(b.id));
+    $("#band-refs-wrap").hidden = !refs.length;
+    $("#band-refs").replaceChildren(...refs.map((r) => el("li", { id: `ref-${state.refNum.get(r.id)}`, value: state.refNum.get(r.id) },
+      r.cite, " ", el("a", { href: `https://doi.org/${r.doi}`, target: "_blank", rel: "noopener" }, `doi:${r.doi}`))));
   }
   function renderBandRows() {
     const B = state.bands;
     const tb = $("#bands-table tbody");
-    tb.replaceChildren(...B.bands.map((b, i) => el("tr", {
-      class: i === state.activeBand ? "on" : "",
-      onclick: () => highlightBand(i),
-    }, B.columns.map(([k]) => el("td", {},
-      k === "kda" ? el("b", {}, `~${b.kda}`) : k === "kind" ? el("span", { class: "kind" }, KIND_LABEL[b.kind] || b.kind) : b[k])))));
+    const ncol = B.columns.length + 1;
+    const rows = [];
+    B.bands.forEach((b, i) => {
+      const open = state.openEvidence.has(i);
+      const cells = B.columns.map(([k]) => el("td", {},
+        k === "kda" ? el("b", {}, `~${b.kda}`)
+          : k === "kind" ? el("span", { class: "kind" }, KIND_LABEL[b.kind] || b.kind)
+          : k === "guess" ? [b.guess, b.guess_refs?.length ? refLinks(b.guess_refs) : null]
+          : b[k]));
+      const btn = b.evidence?.length ? el("button", {
+        class: "ev-btn", "aria-expanded": open ? "true" : "false",
+        onclick: (e) => { e.stopPropagation(); open ? state.openEvidence.delete(i) : state.openEvidence.add(i); renderBandRows(); },
+      }, open ? "Hide evidence" : "Show evidence") : null;
+      rows.push(el("tr", { class: i === state.activeBand ? "on" : "", onclick: () => highlightBand(i) }, cells, el("td", {}, btn)));
+      if (open) {
+        const items = b.evidence.map((e) => el("li", { class: `ev ev-${e.kind}` },
+          el("span", { class: "ev-tag" }, e.kind === "data" ? "These gels" : e.kind === "lit" ? "Literature" : "Note"),
+          el("span", {}, e.text, e.refs?.length ? refLinks(e.refs) : null)));
+        rows.push(el("tr", { class: "ev-row" }, el("td", { colspan: ncol }, el("ul", { class: "ev-list" }, items))));
+      }
+    });
+    tb.replaceChildren(...rows);
   }
   // highlight a band everywhere without zooming: the whole profile stays in view
   function highlightBand(i) {
