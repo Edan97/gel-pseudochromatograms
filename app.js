@@ -10,8 +10,8 @@
   // line style marks what was done differently to a lane (as in pseudochrom.py)
   const DASHES = [["no CPI", "dash"], ["vehicle", "dash"], ["bead eluate", "dash"], ["−REP1", "dash"],
                   ["−RabGGTase", "dot"], ["−B-GPP", "dashdot"]];
-  const KIND_LABEL = { endogenous: "endogenous biotinylated", reagent: "from the reaction mix?",
-                       reaction: "reaction product", rab: "Rab-like product", odd: "biotin-GPP, no enzyme" };
+  const KIND_LABEL = { endogenous: "endogenous", reagent: "reaction mix?",
+                       reaction: "product", rab: "Rab-like", odd: "no-enzyme label" };
 
   // ladder sizes plus a few in between, so a zoomed-in axis still has numbers
   const TICKS = [250, 200, 150, 120, 100, 75, 60, 50, 40, 37, 30, 25, 20, 17, 15, 12, 10];
@@ -207,6 +207,7 @@
   function showEvidence(key) {
     if (state.openEvidence.has(key)) { state.openEvidence.delete(key); renderBandRows(); return; }
     const b = key === "picked" ? state.picked : state.bands.bands[key];
+    state.openEvidence.clear(); // one band's evidence at a time
     state.openEvidence.add(key);
     if (key !== "picked") { state.activeBand = key; state.picked = null; }
     selectOnly(evidenceLanes(b));
@@ -423,6 +424,8 @@
       pickBandAt(kdaForRow(g, lane || null, pt.y), lane || null);
     });
     svg.append(sv("g", { id: "hover-marks" }));
+    if (band) loadImg(src).then((im) => { if (state.gelMode === "whole" && state.gel === g.id) renderCloseup([{ g, im, lanes }], true); });
+    else renderCloseup([], true);
     view.append(svg);
     drawHoverMarks();
     renderGelNotes(g);
@@ -466,19 +469,20 @@
   }
 
   // one strip: columns x0..x1 of the gel, every output row taken from the gel row where that kDa sits in this lane
-  function drawStrip(canvas, im, g, lane, x0, x1) {
+  // view: how tall the strip is and which size each of its rows shows (default: the side-by-side scale)
+  function drawStrip(canvas, im, g, lane, x0, x1, view = { h: SBS.h, kda: sbsKda }) {
     const dpr = window.devicePixelRatio || 1;
     canvas.width = Math.round(SBS.w * dpr);
-    canvas.height = Math.round(SBS.h * dpr);
+    canvas.height = Math.round(view.h * dpr);
     canvas.style.width = SBS.w + "px";
-    canvas.style.height = SBS.h + "px";
+    canvas.style.height = view.h + "px";
     const ctx = canvas.getContext("2d");
     ctx.imageSmoothingEnabled = true;
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     const sx = Math.max(0, x0), sw = Math.min(g.width, x1) - sx;
     for (let y = 0; y < canvas.height; y++) {
-      const r = rowForKda(g, lane, sbsKda((y + 0.5) / dpr));
+      const r = rowForKda(g, lane, view.kda((y + 0.5) / dpr));
       if (r === null || r < 0 || r >= g.height - 1) continue;
       ctx.drawImage(im, sx, r, sw, 1, 0, y, canvas.width, 1);
     }
@@ -544,6 +548,53 @@
     const top = box.querySelector("canvas").offsetTop;
     axisCol.style.marginTop = top + "px";
     drawSbsMarks();
+    renderCloseup(order.map((gid, gi) => ({ g: gelById(gid), im: imgs[gi], lanes: lanes.filter((x) => x.gel === gid) })), false);
+  }
+
+  // the picked band again, magnified and with nothing drawn over it, so the region can be inspected by eye
+  const CLOSE = { h: 170, pad: 1.35 };
+  function renderCloseup(groups, labels) {
+    const box = $("#closeup");
+    const b = curBand();
+    box.hidden = !b || !groups.length;
+    if (box.hidden) { box.replaceChildren(); return; }
+    const top = Math.log10(b.hi * CLOSE.pad), bot = Math.log10(b.lo / CLOSE.pad);
+    const y = (k) => CLOSE.h * (top - Math.log10(k)) / (top - bot);
+    const view = { h: CLOSE.h, kda: (py) => 10 ** (top - (py / CLOSE.h) * (top - bot)) };
+
+    const axis = sv("svg", { width: 44, height: CLOSE.h });
+    for (const [k, strong] of [[b.hi, false], [b.kda, true], [b.lo, false]]) {
+      const yy = y(k);
+      axis.append(sv("line", { x1: strong ? 34 : 38, x2: 44, y1: yy, y2: yy }));
+      const t = sv("text", { x: 32, y: yy, "text-anchor": "end", "dominant-baseline": "middle", "font-weight": strong ? 700 : 400 });
+      t.textContent = fmtKda(k);
+      axis.append(t);
+    }
+    // the band's edges as a bracket on the scale, not over the image
+    axis.append(sv("path", { d: `M41 ${y(b.hi)} H43 V${y(b.lo)} H41`, fill: "none", "stroke-width": 1.5 }));
+    const axisCol = el("div", { class: "sbs-axis" }, axis);
+    const cols = [axisCol];
+    for (const { g, im, lanes } of groups) {
+      const strips = el("div", { class: "sbs-strips" });
+      const mk = (label, tip, draw, lane) => {
+        const c = el("canvas", { title: tip });
+        const p = lane ? presence(lane, b) : null;
+        strips.append(el("div", { class: "sbs-strip" },
+          labels ? el("div", { class: "sbs-label short" }, el("span", {}, label)) : null,
+          el("div", { class: `sbs-pres ${p ? "pres-" + p.state : ""}`, title: p ? PRES_LABEL[p.state] : "" }, p ? GLYPH[p.state] : ""), c));
+        draw(c);
+      };
+      mk("Ladder", `${g.name}: ladder`, (c) => drawStrip(c, im, g, null, g.ladder.x[0], g.ladder.x[1], view));
+      for (const l of lanes) {
+        const half = (l.cols[1] - l.cols[0]) / 0.6 / 2 * 0.9, mid = (l.cols[0] + l.cols[1]) / 2;
+        mk(l.name, `${l.legend}${l.detail ? " · " + l.detail : ""}\n${g.name}, lane "${l.name}"`, (c) => drawStrip(c, im, g, l, mid - half, mid + half, view), l);
+      }
+      cols.push(el("div", { class: "sbs-group" }, el("div", { class: "sbs-group-head" }, g.name), strips));
+    }
+    box.replaceChildren(
+      el("p", { class: "muted small" }, `Close-up of ~${fmtKda(b.kda)} kDa (${fmtKda(b.lo)}–${fmtKda(b.hi)}, bracketed on the scale), with nothing drawn over the image. ${labels ? "" : "Columns line up with the strips above. "}Contrast is each image's own.`),
+      el("div", { class: "sbs closeup-strips" }, cols));
+    axisCol.style.marginTop = box.querySelector("canvas").offsetTop + "px";
   }
 
   function drawSbsMarks() {

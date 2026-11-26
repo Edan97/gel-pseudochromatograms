@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gel Pseudo-chromatograms</title>
 <meta name="description" content="Streptavidin blot lanes from an in vitro prenylation assay, as traces on a shared kDa axis, with the gel images beside them.">
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 <script src="https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.35.2/plotly-basic.min.js"></script>
 </head>
 <body>
@@ -86,6 +86,7 @@
         <p class="muted small">Each selected lane cut from its gel beside that gel's ladder, every strip stretched onto the same kDa scale so sizes line up across gels. Contrast is each image's own. Click a strip to pick the band there; with a band picked, ✓ / ✗ under each strip says whether it's seen. Hovering over the plot marks that size across the strips.</p>
         <div id="sbs" class="sbs"></div>
       </div>
+      <div id="closeup" class="closeup" hidden></div>
     </div>
 
     <div class="card">
@@ -109,6 +110,6 @@
 <footer class="muted small">
   Made with <code>pseudochrom.py</code>: ladder (Precision Plus, 250–10 kDa) fitted per gel, lanes aligned on shared endogenous bands, background removed. Unpublished optimisation data.
 </footer>
-<script src="app.js?v=4"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
