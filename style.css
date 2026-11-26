@@ -239,3 +239,32 @@ footer { padding: 0 20px 20px; }
 .rab-more { margin-top: 10px; font-size: 13px; }
 .rab-more summary { cursor: pointer; font-weight: 600; }
 .rab-more ul { padding-left: 20px; display: grid; gap: 3px; }
+
+/* Rab card: fit view beside the saved strips */
+.rab-work { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; margin-top: 10px; align-items: start; }
+@media (min-width: 1320px) { .rab-work { grid-template-columns: minmax(340px, 640px) minmax(0, 1fr); } }
+.rab-fit-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.rab-save { font-size: 12px; padding: 2px 9px; }
+.rab-save.small { font-size: 11px; padding: 0 6px; }
+.rab-save.on { border-color: var(--accent); color: var(--accent); }
+.rab-svg .fitwin { fill: var(--zone); }
+.rab-svg .ptitle { fill: var(--text-2); font-size: 11px; font-weight: 600; }
+.rab-svg .tick { stroke: var(--text-2); }
+#rab-compare { min-width: 0; }
+.rab-cmp-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.rab-cmp-head .seg button, .rab-cmp-head > button { font-size: 12px; padding: 2px 8px; }
+.rab-cmp-row { position: relative; display: flex; align-items: flex-start; overflow-x: auto; padding-bottom: 6px; }
+.rab-cmp-axis { flex: none; }
+.rab-cmp-strips { display: flex; gap: 10px; }
+.rab-cmp-pair { flex: none; display: flex; flex-direction: column; align-items: center; }
+.rab-cmp-label { height: 96px; display: flex; align-items: flex-end; }
+.rab-cmp-label span { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 10.5px; line-height: 1.15; max-height: 96px; overflow: hidden; }
+.rab-cmp-imgs { display: flex; gap: 2px; margin-top: 4px; }
+.rab-cmp-imgs canvas { display: block; background: #fff; border-radius: 2px; }
+.rab-cmp-lane { position: relative; }
+.rab-cmp-marks i { position: absolute; right: -7px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 6px solid; transform: scaleX(-1); }
+.rab-cmp-foot { display: flex; gap: 4px; align-items: center; margin-top: 3px; }
+.rab-cmp-foot button { padding: 0 6px; font-size: 12px; line-height: 1.4; }
+.rab-cmp-warn { font-size: 10px; color: #D55E00; }
+.rab-cmp-guide { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed var(--text); pointer-events: none; }
+.rab-cmp-guide b { position: absolute; left: 0; top: -8px; width: 34px; text-align: right; font-size: 10.5px; background: var(--surface); }

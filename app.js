@@ -3,7 +3,7 @@
   "use strict";
 
   // which build of the page this is: bump_build.py raises it here, in build.json and in index.html together
-  const BUILD = 11;
+  const BUILD = 12;
 
   // Okabe-Ito, ordered so the faint yellow and the black come last; black becomes light grey on a dark page
   const LANE_HUES = {
@@ -44,6 +44,8 @@
     geno: "all", colourBy: "defect", ymax: "auto", showBands: true,
     gel: null, gelMode: "whole", activeBand: null, hoverKda: null,
     rab: null, rabGel: null, rabLane: null, rabMode: "share", // the Rab sub-band card
+    rabSaved: [],           // lanes saved for side-by-side inspection in the Rab card (up to 6)
+    rabAlign: "ladder",     // line saved strips up by each gel's ladder, or by the ~54 kDa band in each lane
     pickMode: "band",        // what a click on a gel image picks: a band (default) or a lane
     picked: null,            // a band picked on a gel that the band table doesn't have: {kda, lo, hi}
     openEvidence: new Set(), // band-table rows whose evidence is open (index, or "picked")
@@ -68,7 +70,7 @@
     const p = new URLSearchParams(location.hash.slice(1));
     return {
       v: p.get("v"), l: p.get("l") ? p.get("l").split("|").filter(Boolean) : null,
-      c: p.get("c"), g: p.get("g"), y: p.get("y"), gv: p.get("gv"), pm: p.get("pm"), b: p.get("b"),
+      c: p.get("c"), g: p.get("g"), y: p.get("y"), gv: p.get("gv"), pm: p.get("pm"), b: p.get("b"), rs: p.get("rs"), ra: p.get("ra"),
     };
   }
   function writeHash() {
@@ -82,6 +84,8 @@
     if (state.pickMode === "lane") p.set("pm", "lane");
     const b = curBand();
     if (b) p.set("b", String(b.kda));
+    if (state.rabSaved.length) p.set("rs", state.rabSaved.join("|"));
+    if (state.rabAlign !== "ladder") p.set("ra", state.rabAlign);
     history.replaceState(null, "", "#" + p.toString());
   }
 
@@ -496,9 +500,10 @@
   // view: how tall the strip is and which size each of its rows shows (default: the side-by-side scale)
   function drawStrip(canvas, im, g, lane, x0, x1, view = { h: SBS.h, kda: sbsKda }) {
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(SBS.w * dpr);
+    const w = view.w || SBS.w;
+    canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(view.h * dpr);
-    canvas.style.width = SBS.w + "px";
+    canvas.style.width = w + "px";
     canvas.style.height = view.h + "px";
     const ctx = canvas.getContext("2d");
     ctx.imageSmoothingEnabled = true;
@@ -859,7 +864,8 @@
         el("span", { class: "rab-track" }, bar),
         el("span", { class: `rab-r2${rl.r2 < 0.95 ? " low" : ""}`, title: "How well the sub-bands reproduce the lane's profile (1 = exactly)" }, `R² ${rl.r2.toFixed(2)}`));
     });
-    const skipped = rg.skipped.length ? el("p", { class: "muted small" }, "Set aside: ", rg.skipped.map((x) => `${x.lane} (${x.why})`).join(", "), ".") : null;
+    const skipped = rg.skipped.length ? el("p", { class: "muted small" }, "Set aside, not split: ",
+      rg.skipped.map((x, i) => [i ? ", " : "", `${x.lane} (${x.why}) `, saveBtn(`${rg.gel}:${x.lane}`, true)]), ".") : null;
 
     body.replaceChildren(...[
       el("p", {}, N.summary || ""),
@@ -870,69 +876,222 @@
       rg.lanes.length ? el("div", { class: "rab-rows" }, rows) : null,
       skipped,
       rg.lanes.length ? el("p", { class: "muted small" }, "Click a lane to see how its profile was split.") : null,
-      el("div", { id: "rab-fit" }),
+      el("div", { class: "rab-work" }, el("div", { id: "rab-fit" }), el("div", { id: "rab-compare" })),
       el("details", { class: "rab-more" }, el("summary", {}, "How it was split, and what to be careful of"),
         el("p", {}, N.method || ""), N.caveats ? el("ul", {}, N.caveats.map((c) => el("li", {}, c))) : null),
     ].filter(Boolean));
     renderRabFit(rg, comps);
+    renderRabCompare();
   }
 
-  // one lane's profile with its fitted sub-bands, and the lane itself on its side underneath, on one kDa axis
+  function saveBtn(id, small) {
+    const on = state.rabSaved.includes(id);
+    return el("button", {
+      class: `rab-save${small ? " small" : ""}${on ? " on" : ""}`,
+      title: on ? "Remove this lane from the saved strips" : "Keep this lane in the saved strips, beside its ladder, for close comparison (up to 6)",
+      onclick: (e) => { e.stopPropagation(); toggleSaved(id); },
+    }, on ? "Saved ✓" : small ? "+ save" : "Save strip");
+  }
+  function toggleSaved(id) {
+    if (state.rabSaved.includes(id)) state.rabSaved = state.rabSaved.filter((x) => x !== id);
+    else if (state.rabSaved.length >= 6) { state.rabSavedFull = true; }
+    else state.rabSaved.push(id);
+    renderRab();
+    writeHash();
+    state.rabSavedFull = false;
+  }
+
+  // the gel image's pixels, kept once per image, for drawing a lane on its side
+  const pixCache = new Map();
+  function imgPixels(src) {
+    if (!pixCache.has(src)) pixCache.set(src, loadImg(src).then((im) => {
+      const c = document.createElement("canvas");
+      c.width = im.naturalWidth; c.height = im.naturalHeight;
+      const x = c.getContext("2d");
+      x.drawImage(im, 0, 0);
+      return { w: c.width, h: c.height, d: x.getImageData(0, 0, c.width, c.height).data };
+    }));
+    return pixCache.get(src);
+  }
+  function grey(P, x, y) {
+    const xi = Math.round(x), y0 = Math.floor(y), f = y - y0;
+    if (xi < 0 || xi >= P.w || y0 < 0 || y0 >= P.h - 1) return 255;
+    return (1 - f) * P.d[(y0 * P.w + xi) * 4] + f * P.d[((y0 + 1) * P.w + xi) * 4];
+  }
+
+  // one lane, three ways on one kDa axis: before background removal (with the background taken off),
+  // after it (with the fitted sub-bands), and the lane itself on its side
   async function renderRabFit(rg, comps) {
     const box = $("#rab-fit");
     const rl = rg.lanes.find((l) => l.lane === state.rabLane);
-    if (!box || !rl) return;
+    if (!box || !rl) { if (box) box.replaceChildren(); return; }
+    const R = state.rab;
     const lane = laneById(`${rg.gel}:${rl.lane}`);
     const g = gelById(rg.gel);
-    const [klo, khi] = state.rab.window;
+    const ev = rg.every[rl.lane];
+    const [klo, khi] = R.window;
+    const [clo, chi] = R.context;
+    const CK = R.context_kda;
+    // after background removal: the lane's trace on the page, over the wider window
     const K = state.data.kda;
-    const pts = [];
-    for (let i = 0; i < K.length; i++) if (K[i] >= klo && K[i] <= khi && lane.y[i] !== null) pts.push({ x: Math.log10(K[i]), y: lane.y[i] });
-    pts.sort((a, b) => a.x - b.x);
-    const xs = pts.map((p) => p.x);
-    const xmin = Math.min(...xs), xmax = Math.max(...xs), xmean = xs.reduce((a, b) => a + b, 0) / xs.length;
+    const after = [];
+    for (let i = 0; i < K.length; i++) if (K[i] >= clo && K[i] <= chi && lane.y[i] !== null) after.push({ x: Math.log10(K[i]), y: lane.y[i] });
+    after.sort((a, b) => a.x - b.x);
+    const fitXs = after.filter((p) => p.x >= Math.log10(klo) && p.x <= Math.log10(khi)).map((p) => p.x);
+    const xmin = Math.min(...fitXs), xmax = Math.max(...fitXs), xmean = fitXs.reduce((a, b) => a + b, 0) / fitXs.length;
     const comp = (j, x) => rl.amps[j] * Math.exp(-0.5 * ((x - rl.centres[j]) / rl.sigma) ** 2);
-    const base = (x) => { const t = (x - xmean) / (xmax - xmin); return rl.base[0] + rl.base[1] * Math.max(t, 0) + rl.base[2] * Math.max(-t, 0); };
-    const W = Math.min(640, box.clientWidth || 640), Hh = 200, padL = 40, padR = 10, padT = 8, padB = 22;
-    const X = (x) => padL + (W - padL - padR) * (Math.log10(khi) - x) / (Math.log10(khi) - Math.log10(klo));
-    const ymax = Math.max(...pts.map((p) => p.y), ...xs.map((x) => base(x) + rl.amps.reduce((a, _, j) => a + comp(j, x), 0))) * 1.08 || 1;
-    const Y = (y) => padT + (Hh - padT - padB) * (1 - y / ymax);
-    const svg = sv("svg", { width: W, height: Hh, class: "rab-svg" });
-    for (const k of [28, 27, 26, 25, 24, 23, 22, 21]) {
-      const x = X(Math.log10(k));
-      svg.append(sv("line", { x1: x, x2: x, y1: padT, y2: Hh - padB, class: "grid" }));
-      const t = sv("text", { x, y: Hh - 6, "text-anchor": "middle" }); t.textContent = k; svg.append(t);
-    }
-    for (const v of [0, ymax / 2 / 1.08]) {
-      const t = sv("text", { x: padL - 4, y: Y(v), "text-anchor": "end", "dominant-baseline": "middle" }); t.textContent = v.toFixed(2); svg.append(t);
-    }
-    const path = (f) => xs.map((x, i) => `${i ? "L" : "M"}${X(x).toFixed(1)},${Y(f(x)).toFixed(1)}`).join("");
-    for (const c of comps) {
-      const d = path((x) => base(x) + comp(c.i, x)) + xs.slice().reverse().map((x) => `L${X(x).toFixed(1)},${Y(base(x)).toFixed(1)}`).join("") + "Z";
-      svg.append(sv("path", { d, fill: c.colour, "fill-opacity": 0.35, stroke: c.colour, "stroke-width": 1.5 }));
-    }
-    svg.append(sv("path", { d: path(base), fill: "none", class: "base" }));
-    svg.append(sv("path", { d: path((x) => base(x) + rl.amps.reduce((a, _, j) => a + comp(j, x), 0)), fill: "none", class: "sum" }));
-    svg.append(sv("path", { d: pts.map((p, i) => `${i ? "L" : "M"}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(""), fill: "none", class: "data" }));
+    const fbase = (x) => { const t = (x - xmean) / (xmax - xmin); return rl.base[0] + rl.base[1] * Math.max(t, 0) + rl.base[2] * Math.max(-t, 0); };
+    const fsum = (x) => fbase(x) + rl.amps.reduce((a, _, j) => a + comp(j, x), 0);
+    // before: darkness and the background that was taken off (fractions of a saturated pixel)
+    const before = CK.map((k, i) => ({ x: Math.log10(k), raw: ev.raw[i], bg: ev.base[i] })).filter((p) => p.raw !== null && p.bg !== null).sort((a, b) => a.x - b.x);
+    const bgAt = (x) => { let best = before[0]; for (const p of before) if (Math.abs(p.x - x) < Math.abs(best.x - x)) best = p; return best.bg; };
+    const toDark = (x, v) => { const b = bgAt(x); return b + v * (1 - b); };
 
-    // the lane on its side: each column is the image row where that size sits in this lane
-    const strip = el("canvas", { class: "rab-strip", title: "The lane itself, laid on its side along the same kDa axis" });
-    const dpr = window.devicePixelRatio || 1, SH = 34;
-    strip.width = Math.round(W * dpr); strip.height = Math.round(SH * dpr);
-    strip.style.width = W + "px"; strip.style.height = SH + "px";
-    box.replaceChildren(el("p", { class: "small" }, el("b", {}, lane.legend), el("span", { class: "muted" }, ` · ${g.name} · R² ${rl.r2.toFixed(2)} · solid line: the lane; dashed: the fitted sub-bands added up; grey: baseline`)), svg, strip);
-    const im = await loadImg(`data/${state.version}/${g.image}`);
+    const W = Math.max(320, Math.min(640, box.clientWidth || 600)), padL = 44, padR = 10;
+    const X = (x) => padL + (W - padL - padR) * (Math.log10(chi) - x) / (Math.log10(chi) - Math.log10(clo));
+    const panel = (title, H, ymax, draw) => {
+      const padT = 16, padB = 4;
+      const Y = (y) => padT + (H - padT - padB) * (1 - y / ymax);
+      const svg = sv("svg", { width: W, height: H, class: "rab-svg" });
+      svg.append(sv("rect", { x: X(Math.log10(khi)), y: padT, width: X(Math.log10(klo)) - X(Math.log10(khi)), height: H - padT - padB, class: "fitwin" }));
+      for (const k of [34, 30, 28, 26, 25, 24, 23, 22, 21, 20, 18]) { const x = X(Math.log10(k)); svg.append(sv("line", { x1: x, x2: x, y1: padT, y2: H - padB, class: "grid" })); }
+      const tt = sv("text", { x: padL, y: 11, class: "ptitle" }); tt.textContent = title; svg.append(tt);
+      for (const v of [0, ymax / 2]) { const t = sv("text", { x: padL - 4, y: Y(v), "text-anchor": "end", "dominant-baseline": "middle" }); t.textContent = v.toFixed(2); svg.append(t); }
+      draw(svg, Y);
+      return svg;
+    };
+    const line = (pts, Y, cls) => sv("path", { d: pts.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(""), fill: "none", class: cls });
+    const fill = (top, bot, Y, colour) => sv("path", {
+      d: top.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join("") + bot.slice().reverse().map((p) => `L${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join("") + "Z",
+      fill: colour, "fill-opacity": 0.35, stroke: colour, "stroke-width": 1.2 });
+
+    const ymaxB = Math.max(...before.map((p) => p.raw)) * 1.08 || 1;
+    const pBefore = panel("Before background removal (darkness; 1 = a saturated pixel)", 150, ymaxB, (svg, Y) => {
+      svg.append(fill(before.map((p) => [p.x, p.bg]), before.map((p) => [p.x, 0]), Y, "#999999"));
+      for (const c of comps) {
+        svg.append(fill(fitXs.map((x) => [x, toDark(x, fbase(x) + comp(c.i, x))]), fitXs.map((x) => [x, toDark(x, fbase(x))]), Y, c.colour));
+      }
+      svg.append(line(before.map((p) => [p.x, p.raw]), Y, "data"));
+      svg.append(line(fitXs.map((x) => [x, toDark(x, fsum(x))]), Y, "sum"));
+    });
+    const ymaxA = Math.max(...after.map((p) => p.y), ...fitXs.map(fsum)) * 1.08 || 1;
+    const pAfter = panel("After: the trace used, with the fitted sub-bands", 150, ymaxA, (svg, Y) => {
+      for (const c of comps) svg.append(fill(fitXs.map((x) => [x, fbase(x) + comp(c.i, x)]), fitXs.map((x) => [x, fbase(x)]), Y, c.colour));
+      svg.append(line(fitXs.map((x) => [x, fbase(x)]), Y, "base"));
+      svg.append(line(after.map((p) => [p.x, p.y]), Y, "data"));
+      svg.append(line(fitXs.map((x) => [x, fsum(x)]), Y, "sum"));
+    });
+    // the kDa scale, with each sub-band's fitted position
+    const axis = sv("svg", { width: W, height: 26, class: "rab-svg" });
+    for (const k of [34, 30, 28, 26, 25, 24, 23, 22, 21, 20, 18]) { const t = sv("text", { x: X(Math.log10(k)), y: 22, "text-anchor": "middle" }); t.textContent = k; axis.append(t); }
+    for (const c of comps) { const x = X(rl.centres[c.i]); axis.append(sv("path", { d: `M${x - 4},0 L${x + 4},0 L${x},7 Z`, fill: c.colour })); }
+
+    const LH = 96;
+    const strip = el("canvas", { class: "rab-strip", title: "The lane itself on its side: left of the strip is the top of the gel; top to bottom is across the lane, with some margin either side" });
+    const dpr = window.devicePixelRatio || 1;
+    strip.width = Math.round(W * dpr); strip.height = Math.round(LH * dpr);
+    strip.style.width = W + "px"; strip.style.height = LH + "px";
+    box.replaceChildren(
+      el("div", { class: "rab-fit-head" }, el("span", { class: "small" }, el("b", {}, lane.legend), el("span", { class: "muted" }, ` · ${g.name} · R² ${rl.r2.toFixed(2)}`)), saveBtn(lane.id)),
+      el("p", { class: "muted small" }, "Black: the lane. Grey (top): the background that was taken off. Dashed: the fitted sub-bands added up; the shaded column is the fitted window. Bottom: the lane itself on its side, on the same scale."),
+      pBefore, pAfter, axis, strip);
+    const P = await imgPixels(`data/${state.version}/${g.image}`);
     const ctx = strip.getContext("2d");
-    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, strip.width, strip.height);
-    const half = (lane.cols[1] - lane.cols[0]) / 0.6 / 2 * 0.9, mid = (lane.cols[0] + lane.cols[1]) / 2;
-    const sx = Math.max(0, mid - half), sw = Math.min(g.width, mid + half) - sx;
-    for (let px = Math.round(padL * dpr); px < Math.round((W - padR) * dpr); px++) {
-      const x = Math.log10(khi) - ((px / dpr - padL) / (W - padL - padR)) * (Math.log10(khi) - Math.log10(klo));
-      const r = rowForKda(g, lane, 10 ** x);
-      if (r === null || r < 0 || r >= g.height - 1) continue;
-      // the image row at this size, squeezed into one column
-      ctx.drawImage(im, sx, r, sw, 1, px, 0, 1, strip.height);
+    const img = ctx.createImageData(strip.width, strip.height);
+    const mid = (lane.cols[0] + lane.cols[1]) / 2, half = (lane.cols[1] - lane.cols[0]) / 0.6 / 2 * 1.4;
+    for (let px = 0; px < strip.width; px++) {
+      const x = Math.log10(chi) - ((px / dpr - padL) / (W - padL - padR)) * (Math.log10(chi) - Math.log10(clo));
+      const r = px / dpr < padL || px / dpr > W - padR ? null : rowForKda(g, lane, 10 ** x);
+      for (let py = 0; py < strip.height; py++) {
+        const v = r === null ? 255 : grey(P, mid - half + (py + 0.5) / strip.height * 2 * half, r);
+        const o = (py * strip.width + px) * 4;
+        img.data[o] = img.data[o + 1] = img.data[o + 2] = v; img.data[o + 3] = 255;
+      }
     }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  // up to six saved lanes, each beside its own ladder, on one kDa scale; lined up by the ladders, or by the ~54 kDa band in each lane
+  async function renderRabCompare() {
+    const box = $("#rab-compare");
+    if (!box) return;
+    const R = state.rab;
+    const ids = state.rabSaved.filter((id) => laneById(id));
+    const head = el("div", { class: "rab-cmp-head" },
+      el("b", {}, `Saved strips (${ids.length}/6)`),
+      el("div", { class: "seg" }, [["ladder", "Line up by ladder"], ["ref", "by the ~54 kDa band"]].map(([m, t]) =>
+        el("button", { class: state.rabAlign === m ? "on" : "", onclick: () => { state.rabAlign = m; renderRabCompare(); writeHash(); } }, t))),
+      ids.length ? el("button", { class: "small", onclick: () => { state.rabSaved = []; renderRab(); writeHash(); } }, "Clear") : null);
+    const note = state.rabAlign === "ref"
+      ? el("p", { class: "muted small" }, (R.notes && R.notes.reference) || "")
+      : el("p", { class: "muted small" }, "Each lane is cut out beside its own gel's ladder and stretched onto one kDa scale. Hover to compare a position across strips; triangles mark the fitted sub-bands.");
+    if (state.rabSavedFull) note.prepend(el("b", {}, "Up to six strips: remove one first. "));
+    if (!ids.length) {
+      box.replaceChildren(head, el("p", { class: "muted small" }, "Save a lane with \"Save strip\" (or \"+ save\" for a lane that wasn't split) to put it here beside its ladder, for close comparison of up to six lanes."));
+      return;
+    }
+    const KT = 31, KB = 19, H = 400, SW = 32;
+    const ky = (k) => H * (Math.log10(KT) - Math.log10(k)) / (Math.log10(KT) - Math.log10(KB));
+    const kAt = (y) => 10 ** (Math.log10(KT) - (y / H) * (Math.log10(KT) - Math.log10(KB)));
+    const axis = sv("svg", { width: 40, height: H, class: "rab-svg" });
+    for (const k of [30, 28, 26, 25, 24, 23, 22, 21, 20]) {
+      const y = ky(k);
+      axis.append(sv("line", { x1: 34, x2: 40, y1: y, y2: y, class: "tick" }));
+      const t = sv("text", { x: 31, y, "text-anchor": "end", "dominant-baseline": "middle" }); t.textContent = k; axis.append(t);
+    }
+    const strips = el("div", { class: "rab-cmp-strips" });
+    const axisCol = el("div", { class: "rab-cmp-axis" }, axis);
+    const row = el("div", { class: "rab-cmp-row" }, axisCol, strips);
+    box.replaceChildren(head, note, row);
+    for (const id of ids) {
+      const lane = laneById(id);
+      const g = gelById(lane.gel);
+      const rg = R.gels.find((x) => x.gel === lane.gel);
+      const ev = rg && rg.every[lane.name];
+      const ref = ev && ev.ref54;
+      const canRef = ref && ref.h >= 0.03;
+      const f = state.rabAlign === "ref" && canRef ? ref.kda / R.ref.nominal : 1; // lane kDa = shown kDa x f
+      const view = { h: H, w: SW, kda: (py) => kAt(py) * f };
+      const im = await loadImg(`data/${state.version}/${g.image}`);
+      const cL = el("canvas", { title: `${g.name}: ladder` }), cS = el("canvas", { title: `${lane.legend}${lane.detail ? " · " + lane.detail : ""}\n${g.name}, lane "${lane.name}"` });
+      drawStrip(cL, im, g, null, g.ladder.x[0], g.ladder.x[1], view);
+      const half = (lane.cols[1] - lane.cols[0]) / 0.6 / 2 * 0.9, mid = (lane.cols[0] + lane.cols[1]) / 2;
+      drawStrip(cS, im, g, lane, mid - half, mid + half, view);
+      // fitted sub-band positions, where this lane was split
+      const marks = el("div", { class: "rab-cmp-marks" });
+      const rl = rg && rg.lanes.find((x) => x.lane === lane.name);
+      if (rl) {
+        const comps = rabComponents(rg);
+        for (const c of comps) {
+          const y = ky(10 ** rl.centres[c.i] / f);
+          if (y < 0 || y > H) continue;
+          const m = el("i", { title: `${c.label}: ${(10 ** rl.centres[c.i]).toFixed(1)} kDa on its gel's ladder` });
+          m.style.top = `${y - 5}px`; m.style.borderLeftColor = c.colour;
+          marks.append(m);
+        }
+      }
+      const warn = state.rabAlign === "ref" && !canRef ? el("span", { class: "rab-cmp-warn", title: "No clear ~54 kDa band in this lane: lined up by its ladder instead" }, "ladder") : null;
+      const label = lane.legend.replace(/^Prenylation defect/, "Defect").replace(/^No defect/, "No def.");
+      strips.append(el("div", { class: "rab-cmp-pair" },
+        el("div", { class: "rab-cmp-label", title: `${lane.legend} · ${g.name}` }, el("span", {}, `${g.name}: ${label}`)),
+        el("div", { class: "rab-cmp-imgs" }, cL, el("div", { class: "rab-cmp-lane" }, cS, marks)),
+        el("div", { class: "rab-cmp-foot" }, warn, el("button", { class: "small", title: "Remove", onclick: () => toggleSaved(id) }, "×"))));
+    }
+    axisCol.style.marginTop = strips.querySelector("canvas").offsetTop - strips.offsetTop + "px";
+    // a guide that follows the pointer across all the strips
+    const guide = el("div", { class: "rab-cmp-guide" }, el("b", {}));
+    guide.hidden = true;
+    row.append(guide);
+    row.addEventListener("mousemove", (e) => {
+      const c = strips.querySelector("canvas");
+      const top = c.getBoundingClientRect().top;
+      const y = e.clientY - top;
+      if (y < 0 || y > H) { guide.hidden = true; return; }
+      guide.hidden = false;
+      guide.style.top = `${c.offsetTop + y}px`;
+      guide.firstChild.textContent = `${kAt(y).toFixed(1)}`;
+    });
+    row.addEventListener("mouseleave", () => { guide.hidden = true; });
   }
 
   // ------------------------------------------------------------------ load
@@ -988,6 +1147,8 @@
     if (h.gv === "sbs") state.gelMode = "sbs";
     if (h.pm === "lane") state.pickMode = "lane";
     state.startBand = h.b;
+    if (h.rs) state.rabSaved = h.rs.split("|").filter(Boolean).slice(0, 6);
+    if (h.ra === "ref") state.rabAlign = "ref";
     const pickBtns = document.querySelectorAll("#pick-mode button");
     pickBtns.forEach((b) => {
       b.classList.toggle("on", b.dataset.pick === state.pickMode);
