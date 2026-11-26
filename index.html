@@ -63,28 +63,38 @@
     <div class="card">
       <div class="gel-head">
         <h2>Gel images</h2>
-        <div id="gel-tabs" class="tabs" role="tablist"></div>
+        <div class="seg" id="gel-mode" role="group" aria-label="Gel view">
+          <button data-mode="whole" class="on">Whole gels</button>
+          <button data-mode="sbs">Selected lanes side by side</button>
+        </div>
       </div>
+      <div id="whole-gel">
+      <div id="gel-tabs" class="tabs" role="tablist"></div>
       <p class="muted small">Click a lane to add or remove it. Shaded columns are the pixels averaged into each trace; orange ticks are the ladder bands as found. Hovering over the plot marks that size in each selected lane of this gel.</p>
       <div id="gel-view" class="gel-view"></div>
       <details class="gel-side">
         <summary>Notebook notes for this gel</summary>
         <div id="gel-notes"></div>
       </details>
+      </div>
+      <div id="sbs-gel" hidden>
+        <p class="muted small">Each selected lane cut from its gel beside that gel's ladder, every strip stretched onto the same kDa scale so sizes line up across gels. Contrast is each image's own. Hovering over the plot marks that size across the strips.</p>
+        <div id="sbs" class="sbs"></div>
+      </div>
     </div>
 
     <div class="card">
       <h2>Bands</h2>
       <p class="muted small" id="bands-caption"></p>
       <div class="table-scroll"><table id="bands-table" class="tbl"></table></div>
-      <p class="muted small">Click a band to zoom the plot to it.</p>
+      <p class="muted small">Click a band to highlight it on the plot and the side-by-side strips; click it again to clear.</p>
     </div>
 
-    <div class="card">
-      <h2>Selected lanes</h2>
+    <details class="card lane-details">
+      <summary><h2>Lane details <span id="lane-count" class="muted"></span></h2></summary>
       <p class="muted small">Each legend line and the lane it comes from, with every field recorded for it.</p>
       <div class="table-scroll"><table id="lanes-table" class="tbl"></table></div>
-    </div>
+    </details>
   </section>
 </main>
 <footer class="muted small">

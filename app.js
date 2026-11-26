@@ -38,7 +38,8 @@
     selected: [],           // lane ids, in the order picked
     slots: new Map(),       // lane id -> colour slot (each-lane colouring), kept while selected
     geno: "all", colourBy: "defect", ymax: "auto", showBands: true,
-    gel: null, activeBand: null, hoverKda: null,
+    gel: null, gelMode: "whole", activeBand: null, hoverKda: null,
+    imgs: new Map(),        // image src -> Promise<HTMLImageElement>
   };
 
   const dark = () => {
@@ -57,7 +58,7 @@
     const p = new URLSearchParams(location.hash.slice(1));
     return {
       v: p.get("v"), l: p.get("l") ? p.get("l").split("|").filter(Boolean) : null,
-      c: p.get("c"), g: p.get("g"), y: p.get("y"),
+      c: p.get("c"), g: p.get("g"), y: p.get("y"), gv: p.get("gv"),
     };
   }
   function writeHash() {
@@ -67,6 +68,7 @@
     p.set("c", state.colourBy);
     if (state.ymax !== "auto") p.set("y", state.ymax);
     if (state.gel) p.set("g", state.gel);
+    if (state.gelMode === "sbs") p.set("gv", "sbs");
     history.replaceState(null, "", "#" + p.toString());
   }
 
@@ -127,7 +129,7 @@
       const head = el("div", { class: "group-head" },
         el("span", {}, el("b", {}, g.name), " ", el("span", { class: "when" }, g.when)),
         el("span", {},
-          el("button", { title: "Show this gel", onclick: () => { state.gel = g.id; renderGel(); writeHash(); $("#gel-view").scrollIntoView({ behavior: "smooth", block: "nearest" }); } }, "gel"),
+          el("button", { title: "Show this gel", onclick: () => { state.gel = g.id; state.gelMode = "whole"; renderGel(); writeHash(); $("#gel-view").scrollIntoView({ behavior: "smooth", block: "nearest" }); } }, "gel"),
           " ",
           el("button", { title: "Select every shown lane of this gel", onclick: () => { shown.forEach((l) => toggle(l.id, true)); changed(); } }, "all"),
           " ",
@@ -154,7 +156,8 @@
     if (!state.showBands || !state.bands) return [];
     return state.bands.bands.map((b, i) => ({
       type: "rect", xref: "x", yref: "paper", x0: b.lo, x1: b.hi, y0: 0, y1: 1,
-      fillcolor: i === state.activeBand ? cssVar("--zone-hi") : cssVar("--zone"), line: { width: 0 }, layer: "below",
+      fillcolor: i === state.activeBand ? cssVar("--zone-hi") : cssVar("--zone"), layer: "below",
+      line: i === state.activeBand ? { width: 1, color: cssVar("--ladder"), dash: "dot" } : { width: 0 },
     }));
   }
   function bandLabels() {
@@ -245,12 +248,16 @@
   }
 
   function renderGel() {
+    $("#whole-gel").hidden = state.gelMode !== "whole";
+    $("#sbs-gel").hidden = state.gelMode !== "sbs";
+    document.querySelectorAll("#gel-mode button").forEach((b) => b.classList.toggle("on", b.dataset.mode === state.gelMode));
+    if (state.gelMode === "sbs") { renderSbs(); return; }
     const d = state.data;
     if (!state.gel || !gelById(state.gel)) state.gel = d.gels[0].id;
     const tabs = $("#gel-tabs");
     tabs.replaceChildren(...d.gels.map((g) => el("button", {
       role: "tab", class: g.id === state.gel ? "on" : "", "aria-selected": g.id === state.gel ? "true" : "false",
-      onclick: () => { state.gel = g.id; renderGel(); writeHash(); },
+      onclick: () => { state.gel = g.id; state.gelMode = "whole"; renderGel(); writeHash(); },
     }, g.name)));
 
     const g = gelById(state.gel);
@@ -296,6 +303,7 @@
   }
 
   function drawHoverMarks() {
+    if (state.gelMode === "sbs") { drawSbsMarks(); return; }
     const grp = document.getElementById("hover-marks");
     if (!grp) return;
     grp.replaceChildren();
@@ -315,6 +323,117 @@
       const t = sv("text", { x: g.ladder.x[1] + 4, y: rl, "dominant-baseline": "middle", "font-size": Math.max(10, g.width / 60), fill: "#111", "paint-order": "stroke", stroke: "#fff", "stroke-width": 3 });
       t.textContent = `${fmtKda(state.hoverKda)} kDa`;
       grp.append(t);
+    }
+  }
+
+  // ------------------------------------------------------------------ side by side
+
+  const SBS = { kmax: 260, kmin: 9, h: 520, w: 46 };
+  const sbsY = (kda) => SBS.h * (Math.log10(SBS.kmax) - Math.log10(kda)) / (Math.log10(SBS.kmax) - Math.log10(SBS.kmin));
+  const sbsKda = (y) => 10 ** (Math.log10(SBS.kmax) - (y / SBS.h) * (Math.log10(SBS.kmax) - Math.log10(SBS.kmin)));
+
+  function loadImg(src) {
+    if (!state.imgs.has(src)) {
+      state.imgs.set(src, new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; }));
+    }
+    return state.imgs.get(src);
+  }
+
+  // one strip: columns x0..x1 of the gel, every output row taken from the gel row where that kDa sits in this lane
+  function drawStrip(canvas, im, g, lane, x0, x1) {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(SBS.w * dpr);
+    canvas.height = Math.round(SBS.h * dpr);
+    canvas.style.width = SBS.w + "px";
+    canvas.style.height = SBS.h + "px";
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const sx = Math.max(0, x0), sw = Math.min(g.width, x1) - sx;
+    for (let y = 0; y < canvas.height; y++) {
+      const r = rowForKda(g, lane, sbsKda((y + 0.5) / dpr));
+      if (r === null || r < 0 || r >= g.height - 1) continue;
+      ctx.drawImage(im, sx, r, sw, 1, 0, y, canvas.width, 1);
+    }
+  }
+
+  async function renderSbs() {
+    const box = $("#sbs");
+    const token = (state.sbsToken = (state.sbsToken || 0) + 1);
+    const lanes = state.selected.map(laneById).filter(Boolean);
+    if (!lanes.length) { box.replaceChildren(el("div", { class: "sbs-empty" }, "No lanes selected.")); return; }
+    // gels in the order their first lane was picked; each gel's ladder, then its lanes
+    const order = [];
+    for (const l of lanes) if (!order.includes(l.gel)) order.push(l.gel);
+    const imgs = await Promise.all(order.map((id) => loadImg(`data/${state.version}/${gelById(id).image}`)));
+    if (token !== state.sbsToken) return;
+
+    const axis = sv("svg", { width: 44, height: SBS.h });
+    for (const k of state.data.ladder_kda) {
+      const y = sbsY(k);
+      axis.append(sv("line", { x1: 38, x2: 44, y1: y, y2: y }));
+      const t = sv("text", { x: 35, y, "text-anchor": "end", "dominant-baseline": "middle" });
+      t.textContent = k;
+      axis.append(t);
+    }
+    const axisCol = el("div", { class: "sbs-axis" });
+    axisCol.append(axis);
+    const cols = [axisCol];
+
+    order.forEach((gid, gi) => {
+      const g = gelById(gid);
+      const strips = el("div", { class: "sbs-strips" });
+      const mk = (label, cls, colour, dash, draw, tip) => {
+        const c = el("canvas", { title: tip });
+        const sw = el("div", { class: "sbs-swatch" });
+        sw.style.borderTopColor = colour;
+        sw.style.borderTopStyle = dash;
+        strips.append(el("div", { class: "sbs-strip" }, el("div", { class: "sbs-label" }, el("span", { class: cls }, label)), sw, c));
+        draw(c);
+      };
+      mk("Ladder", "ladder", cssVar("--ladder"), "solid",
+        (c) => drawStrip(c, imgs[gi], g, null, g.ladder.x[0], g.ladder.x[1]), `${g.name}: ladder`);
+      for (const l of lanes.filter((x) => x.gel === gid)) {
+        const st = laneStyle(l);
+        const half = (l.cols[1] - l.cols[0]) / 0.6 / 2 * 0.9; // the whole lane, not just the averaged middle
+        const mid = (l.cols[0] + l.cols[1]) / 2;
+        mk(l.legend.replace(/^Prenylation defect/, "Defect"), "", st.color,
+          st.dash === "solid" ? "solid" : st.dash === "dot" ? "dotted" : "dashed",
+          (c) => drawStrip(c, imgs[gi], g, l, mid - half, mid + half),
+          `${l.legend}${l.detail ? " · " + l.detail : ""}\n${g.name}, lane "${l.name}"`);
+      }
+      cols.push(el("div", { class: "sbs-group" }, el("div", { class: "sbs-group-head", title: `${g.name} (${g.when})` }, g.name), strips));
+    });
+    box.replaceChildren(...cols);
+    // line the axis up with the strips
+    const top = box.querySelector("canvas").offsetTop;
+    axisCol.style.marginTop = top + "px";
+    drawSbsMarks();
+  }
+
+  function drawSbsMarks() {
+    const box = $("#sbs");
+    box.querySelectorAll(".sbs-mark, .sbs-zone").forEach((e) => e.remove());
+    const c = box.querySelector("canvas");
+    if (!c) return;
+    const top = c.offsetTop, width = box.scrollWidth;
+    if (state.activeBand !== null && state.bands) {
+      const b = state.bands.bands[state.activeBand];
+      const z = el("div", { class: "sbs-zone" });
+      z.style.top = top + sbsY(b.hi) + "px";
+      z.style.height = sbsY(b.lo) - sbsY(b.hi) + "px";
+      z.style.width = width - 44 + "px";
+      box.append(z);
+    }
+    if (state.hoverKda) {
+      const y = sbsY(state.hoverKda);
+      if (y >= 0 && y <= SBS.h) {
+        const m = el("div", { class: "sbs-mark" }, el("b", {}, `${fmtKda(state.hoverKda)}`));
+        m.style.top = top + y + "px";
+        m.style.width = width + "px";
+        box.append(m);
+      }
     }
   }
 
@@ -339,25 +458,23 @@
     const tb = $("#bands-table tbody");
     tb.replaceChildren(...B.bands.map((b, i) => el("tr", {
       class: i === state.activeBand ? "on" : "",
-      onclick: () => zoomBand(i),
+      onclick: () => highlightBand(i),
     }, B.columns.map(([k]) => el("td", {},
       k === "kda" ? el("b", {}, `~${b.kda}`) : k === "kind" ? el("span", { class: "kind" }, KIND_LABEL[b.kind] || b.kind) : b[k])))));
   }
-  function zoomBand(i) {
-    const b = state.bands.bands[i];
+  // highlight a band everywhere without zooming: the whole profile stays in view
+  function highlightBand(i) {
     state.activeBand = state.activeBand === i ? null : i;
-    if (state.activeBand === null) {
-      Plotly.relayout("plot", { "xaxis.range": [Math.log10(300), Math.log10(9)], "yaxis.autorange": state.ymax !== "1", shapes: bandShapes() });
-    } else {
-      Plotly.relayout("plot", { "xaxis.range": [Math.log10(b.hi * 1.35), Math.log10(b.lo / 1.35)], shapes: bandShapes() });
-      $("#plot").scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
+    if (state.activeBand !== null && !state.showBands) { state.showBands = true; $("#show-bands").checked = true; renderPlot(); }
+    else Plotly.relayout("plot", { shapes: bandShapes() });
     renderBandRows();
+    drawSbsMarks();
   }
 
   function renderLaneTable() {
     const t = $("#lanes-table");
     const lanes = state.selected.map(laneById).filter(Boolean);
+    $("#lane-count").textContent = `(${lanes.length} selected)`;
     const fields = ["genotype", "allele", "mice", "blood", "rbc_lysis", "inhibitor", "dilution", "prep", "reaction", "ug", "ug_note"];
     const heads = ["Legend", "Experiment", "Lane on gel", ...fields.map((f) => f.replace("_", " "))];
     t.replaceChildren(
@@ -404,6 +521,12 @@
     if (h.c === "lane" || h.c === "defect") state.colourBy = h.c;
     if (h.y === "1") state.ymax = "1";
     if (h.g) state.gel = h.g;
+    if (h.gv === "sbs") state.gelMode = "sbs";
+    document.querySelectorAll("#gel-mode button").forEach((b) => b.addEventListener("click", () => {
+      state.gelMode = b.dataset.mode;
+      renderGel();
+      writeHash();
+    }));
     $("#colour-by").value = state.colourBy;
     $("#ymax").value = state.ymax;
 
@@ -417,9 +540,9 @@
       state.data.lanes.filter((l) => state.geno === "all" || l.meta.genotype === state.geno).forEach((l) => toggle(l.id, true));
       changed();
     });
-    document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => {
+    document.querySelectorAll(".seg button[data-geno]").forEach((b) => b.addEventListener("click", () => {
       state.geno = b.dataset.geno;
-      document.querySelectorAll(".seg button").forEach((x) => x.classList.toggle("on", x === b));
+      document.querySelectorAll(".seg button[data-geno]").forEach((x) => x.classList.toggle("on", x === b));
       renderLaneList();
     }));
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (state.data) changed(); });

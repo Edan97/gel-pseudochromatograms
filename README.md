@@ -14,10 +14,14 @@ this folder); opened straight from disk the browser won't load the data.
   experiment has `all` / `none` and `gel` (show its image).
 - **Plot**: drag to zoom, double-click to reset. Height is a fraction of a saturated
   pixel on that image (1 = saturated; a flat top means saturated).
-- **Gel images**: click a lane to add or remove it. Hovering over the plot marks that
-  size in each selected lane of the gel on show.
-- **Bands**: the current reading of each band; click a row to zoom to it.
-- **Selected lanes**: each legend line with every recorded field for its lane.
+- **Gel images**, two views:
+  - *Whole gels*: one gel at a time; click a lane to add or remove it.
+  - *Selected lanes side by side*: each selected lane cut from its gel next to that
+    gel's ladder, all stretched onto one kDa scale so sizes line up across gels.
+  - Hovering over the plot marks that size on the gel view.
+- **Bands**: the current reading of each band; click a row to highlight it on the plot
+  and the strips (no zoom, so the whole profile stays in view).
+- **Lane details** (folded): each legend line with every recorded field for its lane.
 - The address bar keeps the version, the lanes and the colouring, so a link
   reopens the same view.
 
