@@ -3,7 +3,7 @@
   "use strict";
 
   // which build of the page this is: bump_build.py raises it here, in build.json and in index.html together
-  const BUILD = 10;
+  const BUILD = 11;
 
   // Okabe-Ito, ordered so the faint yellow and the black come last; black becomes light grey on a dark page
   const LANE_HUES = {
@@ -43,6 +43,7 @@
     slots: new Map(),       // lane id -> colour slot (each-lane colouring), kept while selected
     geno: "all", colourBy: "defect", ymax: "auto", showBands: true,
     gel: null, gelMode: "whole", activeBand: null, hoverKda: null,
+    rab: null, rabGel: null, rabLane: null, rabMode: "share", // the Rab sub-band card
     pickMode: "band",        // what a click on a gel image picks: a band (default) or a lane
     picked: null,            // a band picked on a gel that the band table doesn't have: {kda, lo, hi}
     openEvidence: new Set(), // band-table rows whose evidence is open (index, or "picked")
@@ -801,17 +802,152 @@
       })));
   }
 
+  // ------------------------------------------------------------------ inside the Rab band (a card for the curious)
+
+  const RAB_POS = ["#E69F00", "#009E73", "#CC79A7", "#56B4E9", "#999999", "#0072B2", "#D55E00"];
+  // the sub-bands of one gel, top of the gel first: matched gels use the shared groups, others are lettered by position
+  function rabComponents(rg) {
+    const R = state.rab;
+    const idx = rg.centres.map((c, i) => i).sort((a, b) => rg.centres[b] - rg.centres[a]);
+    return idx.map((i, j) => {
+      if (rg.matched) {
+        const grp = R.groups.find((x) => x.id === rg.groups[i]);
+        return { i, label: grp.label, colour: grp.colour, kda: rg.centres[i] };
+      }
+      return { i, label: String.fromCharCode(97 + j), colour: RAB_POS[j % RAB_POS.length], kda: rg.centres[i] };
+    });
+  }
+
+  function renderRab() {
+    const card = $("#rab-card");
+    const R = state.rab;
+    card.hidden = !R;
+    if (!R || !card.open) return;
+    const N = R.notes || {};
+    const body = $("#rab-body");
+    const gels = R.gels;
+    if (!state.rabGel || !gels.some((g) => g.gel === state.rabGel)) state.rabGel = (gels.find((g) => g.matched && g.lanes.length) || gels[0]).gel;
+    const rg = gels.find((g) => g.gel === state.rabGel);
+    const comps = rabComponents(rg);
+    if (!rg.lanes.some((l) => l.lane === state.rabLane)) state.rabLane = rg.lanes.length ? rg.lanes[0].lane : null;
+
+    const tabs = el("div", { class: "tabs" }, gels.map((g) => el("button", {
+      class: g.gel === state.rabGel ? "on" : "", onclick: () => { state.rabGel = g.gel; state.rabLane = null; renderRab(); },
+    }, gelById(g.gel).name, g.matched ? null : el("span", { class: "muted" }, g.lanes.length ? " (unmatched)" : " (nothing to split)"))));
+    const modeBtns = el("div", { class: "seg" }, [["share", "Share of the lane's Rab signal"], ["amount", "Amount"]].map(([m, t]) =>
+      el("button", { class: state.rabMode === m ? "on" : "", onclick: () => { state.rabMode = m; renderRab(); } }, t)));
+    const key = el("div", { class: "rab-key" }, comps.map((c) => el("span", {}, el("i", { style: `background:${c.colour}` }), `${c.label} (${c.kda.toFixed(1)} kDa)`)));
+
+    // one bar per usable lane: what the Rab signal is made of
+    const maxTot = Math.max(...rg.lanes.map((l) => l.areas.reduce((a, b) => a + b, 0)), 1e-9);
+    const rows = rg.lanes.map((rl) => {
+      const lane = laneById(`${rg.gel}:${rl.lane}`);
+      const tot = rl.areas.reduce((a, b) => a + b, 0);
+      const bar = el("div", { class: "rab-bar" });
+      bar.style.width = state.rabMode === "amount" ? `${Math.max(1, 100 * tot / maxTot)}%` : "100%";
+      for (const c of comps) {
+        const f = tot > 0 ? rl.areas[c.i] / tot : 0;
+        if (f <= 0) continue;
+        const seg = el("span", { title: `${c.label} (${c.kda.toFixed(1)} kDa): ${(100 * f).toFixed(0)}% of this lane's Rab signal; area ${(rl.areas[c.i] * 1000).toFixed(2)}` },
+          f >= 0.1 ? `${(100 * f).toFixed(0)}%` : "");
+        seg.style.width = `${100 * f}%`;
+        seg.style.background = c.colour;
+        bar.append(seg);
+      }
+      return el("div", { class: `rab-row${rl.lane === state.rabLane ? " on" : ""}`, onclick: () => { state.rabLane = rl.lane; renderRab(); } },
+        el("span", { class: "rab-name", title: lane ? lane.legend : rl.lane }, lane ? lane.legend.replace(/^Prenylation defect/, "Defect") : rl.lane),
+        el("span", { class: "rab-track" }, bar),
+        el("span", { class: `rab-r2${rl.r2 < 0.95 ? " low" : ""}`, title: "How well the sub-bands reproduce the lane's profile (1 = exactly)" }, `R² ${rl.r2.toFixed(2)}`));
+    });
+    const skipped = rg.skipped.length ? el("p", { class: "muted small" }, "Set aside: ", rg.skipped.map((x) => `${x.lane} (${x.why})`).join(", "), ".") : null;
+
+    body.replaceChildren(...[
+      el("p", {}, N.summary || ""),
+      N.findings ? el("ul", { class: "rab-findings" }, N.findings.map((f) => el("li", {}, f))) : null,
+      el("div", { class: "rab-controls" }, tabs, modeBtns),
+      N.gels && N.gels[rg.gel] ? el("p", { class: "muted small" }, N.gels[rg.gel]) : null,
+      rg.lanes.length ? key : null,
+      rg.lanes.length ? el("div", { class: "rab-rows" }, rows) : null,
+      skipped,
+      rg.lanes.length ? el("p", { class: "muted small" }, "Click a lane to see how its profile was split.") : null,
+      el("div", { id: "rab-fit" }),
+      el("details", { class: "rab-more" }, el("summary", {}, "How it was split, and what to be careful of"),
+        el("p", {}, N.method || ""), N.caveats ? el("ul", {}, N.caveats.map((c) => el("li", {}, c))) : null),
+    ].filter(Boolean));
+    renderRabFit(rg, comps);
+  }
+
+  // one lane's profile with its fitted sub-bands, and the lane itself on its side underneath, on one kDa axis
+  async function renderRabFit(rg, comps) {
+    const box = $("#rab-fit");
+    const rl = rg.lanes.find((l) => l.lane === state.rabLane);
+    if (!box || !rl) return;
+    const lane = laneById(`${rg.gel}:${rl.lane}`);
+    const g = gelById(rg.gel);
+    const [klo, khi] = state.rab.window;
+    const K = state.data.kda;
+    const pts = [];
+    for (let i = 0; i < K.length; i++) if (K[i] >= klo && K[i] <= khi && lane.y[i] !== null) pts.push({ x: Math.log10(K[i]), y: lane.y[i] });
+    pts.sort((a, b) => a.x - b.x);
+    const xs = pts.map((p) => p.x);
+    const xmin = Math.min(...xs), xmax = Math.max(...xs), xmean = xs.reduce((a, b) => a + b, 0) / xs.length;
+    const comp = (j, x) => rl.amps[j] * Math.exp(-0.5 * ((x - rl.centres[j]) / rl.sigma) ** 2);
+    const base = (x) => { const t = (x - xmean) / (xmax - xmin); return rl.base[0] + rl.base[1] * Math.max(t, 0) + rl.base[2] * Math.max(-t, 0); };
+    const W = Math.min(640, box.clientWidth || 640), Hh = 200, padL = 40, padR = 10, padT = 8, padB = 22;
+    const X = (x) => padL + (W - padL - padR) * (Math.log10(khi) - x) / (Math.log10(khi) - Math.log10(klo));
+    const ymax = Math.max(...pts.map((p) => p.y), ...xs.map((x) => base(x) + rl.amps.reduce((a, _, j) => a + comp(j, x), 0))) * 1.08 || 1;
+    const Y = (y) => padT + (Hh - padT - padB) * (1 - y / ymax);
+    const svg = sv("svg", { width: W, height: Hh, class: "rab-svg" });
+    for (const k of [28, 27, 26, 25, 24, 23, 22, 21]) {
+      const x = X(Math.log10(k));
+      svg.append(sv("line", { x1: x, x2: x, y1: padT, y2: Hh - padB, class: "grid" }));
+      const t = sv("text", { x, y: Hh - 6, "text-anchor": "middle" }); t.textContent = k; svg.append(t);
+    }
+    for (const v of [0, ymax / 2 / 1.08]) {
+      const t = sv("text", { x: padL - 4, y: Y(v), "text-anchor": "end", "dominant-baseline": "middle" }); t.textContent = v.toFixed(2); svg.append(t);
+    }
+    const path = (f) => xs.map((x, i) => `${i ? "L" : "M"}${X(x).toFixed(1)},${Y(f(x)).toFixed(1)}`).join("");
+    for (const c of comps) {
+      const d = path((x) => base(x) + comp(c.i, x)) + xs.slice().reverse().map((x) => `L${X(x).toFixed(1)},${Y(base(x)).toFixed(1)}`).join("") + "Z";
+      svg.append(sv("path", { d, fill: c.colour, "fill-opacity": 0.35, stroke: c.colour, "stroke-width": 1.5 }));
+    }
+    svg.append(sv("path", { d: path(base), fill: "none", class: "base" }));
+    svg.append(sv("path", { d: path((x) => base(x) + rl.amps.reduce((a, _, j) => a + comp(j, x), 0)), fill: "none", class: "sum" }));
+    svg.append(sv("path", { d: pts.map((p, i) => `${i ? "L" : "M"}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(""), fill: "none", class: "data" }));
+
+    // the lane on its side: each column is the image row where that size sits in this lane
+    const strip = el("canvas", { class: "rab-strip", title: "The lane itself, laid on its side along the same kDa axis" });
+    const dpr = window.devicePixelRatio || 1, SH = 34;
+    strip.width = Math.round(W * dpr); strip.height = Math.round(SH * dpr);
+    strip.style.width = W + "px"; strip.style.height = SH + "px";
+    box.replaceChildren(el("p", { class: "small" }, el("b", {}, lane.legend), el("span", { class: "muted" }, ` · ${g.name} · R² ${rl.r2.toFixed(2)} · solid line: the lane; dashed: the fitted sub-bands added up; grey: baseline`)), svg, strip);
+    const im = await loadImg(`data/${state.version}/${g.image}`);
+    const ctx = strip.getContext("2d");
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, strip.width, strip.height);
+    const half = (lane.cols[1] - lane.cols[0]) / 0.6 / 2 * 0.9, mid = (lane.cols[0] + lane.cols[1]) / 2;
+    const sx = Math.max(0, mid - half), sw = Math.min(g.width, mid + half) - sx;
+    for (let px = Math.round(padL * dpr); px < Math.round((W - padR) * dpr); px++) {
+      const x = Math.log10(khi) - ((px / dpr - padL) / (W - padL - padR)) * (Math.log10(khi) - Math.log10(klo));
+      const r = rowForKda(g, lane, 10 ** x);
+      if (r === null || r < 0 || r >= g.height - 1) continue;
+      // the image row at this size, squeezed into one column
+      ctx.drawImage(im, sx, r, sw, 1, px, 0, 1, strip.height);
+    }
+  }
+
   // ------------------------------------------------------------------ load
 
   async function loadVersion(v, keepSelection) {
     const base = `data/${v}/`;
-    const [data, bands] = await Promise.all([
+    const [data, bands, rab] = await Promise.all([
       fetch(base + "data.json", { cache: "no-cache" }).then((r) => r.json()),
       fetch(base + "bands.json", { cache: "no-cache" }).then((r) => (r.ok ? r.json() : null)),
+      fetch(base + "rab.json", { cache: "no-cache" }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ]);
     state.version = v;
     state.data = data;
     state.bands = bands;
+    state.rab = rab;
     const ids = new Set(data.lanes.map((l) => l.id));
     const keep = (keepSelection || []).filter((id) => ids.has(id));
     state.selected = [];
@@ -826,6 +962,7 @@
     if (v !== newest) older.replaceChildren(`You're looking at ${v}, an older version. `,
       el("button", { onclick: () => { $("#version").value = newest; loadVersion(newest, state.selected.slice()); } }, `Switch to ${newest}`));
     if (bands) renderBands();
+    renderRab();
     state.activeBand = null;
     state.picked = null;
     const bk = parseFloat(state.startBand);
@@ -884,6 +1021,7 @@
       document.querySelectorAll(".seg button[data-geno]").forEach((x) => x.classList.toggle("on", x === b));
       renderLaneList();
     }));
+    $("#rab-card").addEventListener("toggle", () => renderRab());
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (state.data) changed(); });
 
     await loadVersion(v, h.l);

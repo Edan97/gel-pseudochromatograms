@@ -28,5 +28,10 @@
     "id": "v6",
     "date": "2026-11-26",
     "note": "Claims checked lane by lane; uncertain lanes (covered by a neighbour, or faint) counted and shown first"
+  },
+  {
+    "id": "v7",
+    "date": "2026-11-26",
+    "note": "For the curious: the Rab band split into sub-bands, with each one's share per lane"
   }
 ]

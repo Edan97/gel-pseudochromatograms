@@ -29,6 +29,11 @@ this folder); opened straight from disk the browser won't load the data.
   and sorts every lane into seen / not seen / unclear for that band. Click a row to highlight it on the plot
   and the strips (no zoom, so the whole profile stays in view).
 - **Lane details** (folded): each legend line with every recorded field for its lane.
+- **Inside the Rab band** (folded, for the curious): each unsaturated lane's 20.5-28.5 kDa
+  profile split into Gaussian sub-bands (`rab_bands.py` beside the analysis script), with
+  each sub-band's share or amount per lane, the fit for any lane, and the lane itself laid
+  on its side along the same axis. Sub-bands are matched between gels by their pattern
+  (upper, middle, lower), not by exact size.
 - The address bar keeps the version, the lanes and the colouring, so a link
   reopens the same view.
 

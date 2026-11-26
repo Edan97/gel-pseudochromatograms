@@ -1,0 +1,804 @@
+{
+ "caption": "Apparent sizes are read from the ladder and hold to about 5-10% between gels. Heights are fractions of a saturated pixel on the same image. 'Best guess' is the claim; its footnotes are the papers behind it. 'Uncertain' counts the lanes where the band can't be called either way: faint (at the edge of detection) or covered (signal there but no separate peak, usually under a saturated neighbour). 'Show evidence' puts the lanes behind each claim on the plot and gel strips and lists where the band is seen, not seen and uncertain.",
+ "columns": [
+  [
+   "kda",
+   "kDa"
+  ],
+  [
+   "kind",
+   "Type"
+  ],
+  [
+   "before",
+   "Before reaction?"
+  ],
+  [
+   "needs",
+   "Needs"
+  ],
+  [
+   "dilution",
+   "On dilution"
+  ],
+  [
+   "defect",
+   "Defect vs none"
+  ],
+  [
+   "guess",
+   "Best guess"
+  ]
+ ],
+ "references": [
+  {
+   "id": "chandler1986",
+   "doi": "10.1042/bj2370123",
+   "cite": "Chandler CS, Ballard FJ (1986). Multiple biotin-containing proteins in 3T3-L1 cells. Biochemical Journal 237(1):123-130."
+  },
+  {
+   "id": "widmer1996",
+   "doi": "10.1042/bj3160915",
+   "cite": "Widmer J, Fassihi KS, Schlichter SC, et al. (1996). Identification of a second human acetyl-CoA carboxylase gene. Biochemical Journal 316(3):915-922."
+  },
+  {
+   "id": "niers2011",
+   "doi": "10.1021/ac102758m",
+   "cite": "Niers JM, Chen JW, Weissleder R, Tannous BA (2011). Enhanced in vivo imaging of metabolically biotinylated cell surface reporters. Analytical Chemistry 83(3):994-999."
+  },
+  {
+   "id": "vanhove2008",
+   "doi": "10.1016/j.ymgme.2008.09.006",
+   "cite": "Van Hove JL, Josefsberg SBY, Freehauf CL, et al. (2008). Management of a patient with holocarboxylase synthetase deficiency. Molecular Genetics and Metabolism 95(4):201-205."
+  },
+  {
+   "id": "tytgat2015",
+   "doi": "10.1111/1751-7915.12150",
+   "cite": "Tytgat HLP, Schoofs G, Driesen M, et al. (2015). Endogenous biotin-binding proteins: an overlooked factor causing false positives in streptavidin-based protein detection. Microbial Biotechnology 8(1):164-168."
+  },
+  {
+   "id": "grant2019",
+   "doi": "10.1186/s12575-019-0095-z",
+   "cite": "Grant MKO, Shapiro SL, Ashe KH, Liu P, Zahs KR (2019). A cautionary tale: endogenous biotinylated proteins and exogenously-introduced protein A cause antibody-independent artefacts in western blot studies of brain-derived proteins. Biological Procedures Online 21:6."
+  },
+  {
+   "id": "ahmed2014",
+   "doi": "10.1016/j.jim.2014.03.010",
+   "cite": "Ahmed R, Spikings EC, Zhou S, Thompsett AR, Zhang T (2014). Pre-hybridisation: an efficient way of suppressing endogenous biotin-binding activity inherent to biotin-streptavidin detection system. Journal of Immunological Methods 406:143-147."
+  },
+  {
+   "id": "hung2016",
+   "doi": "10.1038/nprot.2016.018",
+   "cite": "Hung V, Udeshi ND, Lam SS, et al. (2016). Spatially resolved proteomic mapping in living cells with the engineered peroxidase APEX2. Nature Protocols 11(3):456-475."
+  },
+  {
+   "id": "stratton2006",
+   "doi": "10.1093/ajcn/84.2.384",
+   "cite": "Stratton SL, Bogusiewicz A, Mock MM, Mock NI, Wells AM, Mock DM (2006). Lymphocyte propionyl-CoA carboxylase and its activation by biotin are sensitive indicators of marginal biotin deficiency in humans. American Journal of Clinical Nutrition 84(2):384-388."
+  },
+  {
+   "id": "jurczyluk2016",
+   "doi": "10.1038/icb.2016.58",
+   "cite": "Jurczyluk J, Munoz MA, Skinner OP, et al. (2016). Mevalonate kinase deficiency leads to decreased prenylation of Rab GTPases. Immunology and Cell Biology 94(10):994-999."
+  },
+  {
+   "id": "munoz2019",
+   "doi": "10.3389/fimmu.2019.01900",
+   "cite": "Munoz MA, Jurczyluk J, Simon A, et al. (2019). Defective protein prenylation in a spectrum of patients with mevalonate kinase deficiency. Frontiers in Immunology 10:1900."
+  }
+ ],
+ "bands": [
+  {
+   "kda": 250,
+   "lo": 225,
+   "hi": 280,
+   "kind": "endogenous",
+   "before": "Yes: pulled down, cleared",
+   "needs": "Present with no biotin-GPP",
+   "dilution": "Fades",
+   "defect": "Not compared",
+   "guess": "ACC (endogenous biotin)",
+   "guess_refs": [
+    "chandler1986",
+    "widmer1996",
+    "niers2011"
+   ],
+   "evidence": [
+    {
+     "kind": "data",
+     "text": "Strep pull-down (Optimisation A, 04/11/26): one of only three bands streptavidin beads pulled out of lysate before any reaction; pre-clearing removed it almost completely.",
+     "lanes": {
+      "with": [
+       "G1:MUT 1in2 bead eluate",
+       "G1:MUT 1in10 bead eluate",
+       "G1:MUT 1in10 not cleared"
+      ],
+      "without": [
+       "G1:MUT 1in10 Strep-cleared"
+      ]
+     }
+    },
+    {
+     "kind": "data",
+     "text": "Reaction drop-outs: faint but present without biotin-GPP (0.02-0.04); the band is weak on this gel in every lane.",
+     "lanes": {
+      "with": [
+       "G2:HET no B-GPP",
+       "G2:MUT no B-GPP"
+      ],
+      "without": []
+     }
+    },
+    {
+     "kind": "lit",
+     "refs": [
+      "chandler1986"
+     ],
+     "text": "In mouse 3T3-L1 cells labelled with [³H]biotin, the biotin-containing subunit of ACC ran at about 220 kDa, and every labelled protein could be removed with avidin."
+    },
+    {
+     "kind": "lit",
+     "refs": [
+      "widmer1996"
+     ],
+     "text": "Mammals have two ACC forms, of about 265 kDa and 275-280 kDa, so an ACC band near 250 on this gel is within the expected range."
+    },
+    {
+     "kind": "lit",
+     "refs": [
+      "niers2011"
+     ],
+     "text": "Lists ACC (cytoplasmic) as one of four endogenously biotinylated proteins of mammalian cells, and shows their levels differ between cell types."
+    }
+   ],
+   "summary": "Most likely acetyl-CoA carboxylase, the largest of the endogenously biotinylated carboxylases, already carrying biotin in the blood before any reaction. Confidence is high that it is endogenously biotinylated (streptavidin pulls it down and it needs no biotin-GPP) and moderate that it is ACC, which rests on size alone."
+  },
+  {
+   "kda": 127,
+   "lo": 124,
+   "hi": 134,
+   "kind": "reagent",
+   "before": "No: not pulled down or cleared",
+   "needs": "Not resolved from ~120",
+   "dilution": "Gets stronger",
+   "defect": "Same",
+   "guess": "From the reaction mix",
+   "evidence": [
+    {
+     "kind": "data",
+     "text": "Strep pull-down: present and unchanged by clearing in the reacted lysate (0.110 → 0.109) and clean in the 1 in 10 eluate; in the 1 in 2 eluate the strong ~120 band's shoulder reaches this window, so it can't be judged there.",
+     "lanes": {
+      "with": [
+       "G1:MUT 1in10 not cleared",
+       "G1:MUT 1in10 Strep-cleared"
+      ],
+      "without": [
+       "G1:MUT 1in2 bead eluate",
+       "G1:MUT 1in10 bead eluate"
+      ]
+     }
+    },
+    {
+     "kind": "data",
+     "text": "Serial dilution (18/09/26): rises from 0.02 at 1 in 5 to about 0.08 at 1 in 100 and below, in both genotypes; it gets stronger, not weaker, as there is less blood.",
+     "lanes": {
+      "with": [
+       "G5:HET 1in100",
+       "G5:MUT 1in100",
+       "G5:HET 1in10000",
+       "G5:MUT 1in10000"
+      ],
+      "without": [
+       "G5:HET 1in5",
+       "G5:MUT 1in5"
+      ]
+     }
+    },
+    {
+     "kind": "data",
+     "text": "Frozen blood (24/09/26) and RBC lysis (19/08/26): the same direction, stronger at 1 in 50 and with 3x lysis (less protein).",
+     "lanes": {
+      "with": [
+       "G3:HET +CPI 1in50",
+       "G4:HET 3x RBC lysis"
+      ],
+      "without": [
+       "G3:HET +CPI neat",
+       "G4:HET 1x RBC lysis"
+      ]
+     }
+    },
+    {
+     "kind": "note",
+     "text": "The lysate seems to suppress it: it is weakest where there is most blood."
+    }
+   ],
+   "summary": "Probably a component of the reaction mix rather than a blood protein: it survives pre-clearing and gets stronger as the lysate is diluted. Confidence is moderate; it overlaps the endogenous ~120 band, so in most lanes the two can't be told apart, and a reaction with no lysate is needed to confirm where it comes from."
+  },
+  {
+   "kda": 120,
+   "lo": 113,
+   "hi": 123,
+   "kind": "endogenous",
+   "before": "Yes: strongly pulled down",
+   "needs": "Too faint here to tell",
+   "dilution": "Can't tell (overlaps ~127)",
+   "defect": "Not compared",
+   "guess": "PC (endogenous biotin)",
+   "guess_refs": [
+    "chandler1986",
+    "vanhove2008",
+    "tytgat2015",
+    "hung2016"
+   ],
+   "evidence": [
+    {
+     "kind": "data",
+     "text": "Strep pull-down: the strongest band in both eluates (0.47 at 1 in 2). In the reacted lysate there is signal here but no separate peak, so the ~40% removal by clearing is only an estimate.",
+     "lanes": {
+      "with": [
+       "G1:MUT 1in2 bead eluate",
+       "G1:MUT 1in10 bead eluate",
+       "G1:MUT 1in10 not cleared"
+      ],
+      "without": [
+       "G1:MUT 1in10 Strep-cleared"
+      ]
+     }
+    },
+    {
+     "kind": "data",
+     "text": "Reaction drop-outs: at most 0.015 without biotin-GPP, at the edge of detection, so this gel can't show the band is there without the label.",
+     "lanes": {
+      "with": [
+       "G2:HET no B-GPP",
+       "G2:MUT no B-GPP"
+      ],
+      "without": []
+     }
+    },
+    {
+     "kind": "lit",
+     "refs": [
+      "chandler1986"
+     ],
+     "text": "The biotinylated PC subunit ran at about 120 kDa in mouse cells."
+    },
+    {
+     "kind": "lit",
+     "refs": [
+      "vanhove2008"
+     ],
+     "text": "In human fibroblasts PC gives a biotinylated band at 128 kDa, and that biotinylation falls to about a tenth in cells lacking holocarboxylase synthetase, the enzyme that puts biotin on carboxylases: genetic evidence that the band is a carboxylase."
+    },
+    {
+     "kind": "lit",
+     "refs": [
+      "tytgat2015"
+     ],
+     "text": "A strong ~125 kDa streptavidin band was purified and sequenced (Edman) and turned out to be pyruvate carboxylase. This was in bacteria, but it is a direct identification rather than one by size."
+    },
+    {
+     "kind": "lit",
+     "refs": [
+      "hung2016"
+     ],
+     "text": "A widely used protocol expects untreated control lanes on streptavidin blots to show only endogenous biotinylated bands at 130, 75 and 72 kDa."
+    },
+    {
+     "kind": "lit",
+     "refs": [
+      "stratton2006"
+     ],
+     "text": "Carboxylase activity is routinely measured in blood lymphocytes, so white cells carry these enzymes."
+    },
+    {
+     "kind": "note",
+     "text": "Mature red cells have no mitochondria, where PC sits, so in whole blood this band should report white cells and platelets rather than red cells (textbook reasoning, not checked against a source here)."
+    },
+    {
+     "kind": "note",
+     "text": "In reacted lysates this window also catches the ~127 reaction-mix band, which grows as the lysate is diluted; outside the pull-down gel the two can't be told apart."
+    }
+   ],
+   "summary": "Most likely pyruvate carboxylase, an endogenously biotinylated mitochondrial enzyme carried by white cells and platelets rather than red cells. Confidence is high from the pull-down, where it is the strongest band, but low anywhere else: in reacted lysates it can't be separated from the ~127 reaction-mix band beside it, and on the drop-out gel it is too faint to show it needs no label."
+  },
+  {
+   "kda": 74,
+   "lo": 70,
+   "hi": 78,
+   "kind": "endogenous",
+   "before": "Yes: pulled down, ~40% cleared",
+   "needs": "Present with no biotin-GPP",
+   "dilution": "Fades",
+   "defect": "Similar",
+   "guess": "MCC / PCC (endogenous biotin)",
+   "guess_refs": [
+    "chandler1986",
+    "vanhove2008",
+    "grant2019",
+    "ahmed2014"
+   ],
+   "evidence": [
+    {
+     "kind": "data",
+     "text": "Strep pull-down: in both eluates (0.36 at 1 in 2). In the reacted lysate there is signal but no separate peak, so the ~40% removal by clearing is only an estimate.",
+     "lanes": {
+      "with": [
+       "G1:MUT 1in2 bead eluate",
+       "G1:MUT 1in10 bead eluate",
+       "G1:MUT 1in10 not cleared"
+      ],
+      "without": [
+       "G1:MUT 1in10 Strep-cleared"
+      ]
+     }
+    },
+    {
+     "kind": "data",
+     "text": "Reaction drop-outs: 0.05-0.08 with no biotin-GPP, the same as with the full reaction.",
+     "lanes": {
+      "with": [
+       "G2:HET no B-GPP",
+       "G2:MUT no B-GPP",
+       "G2:HET full",
+       "G2:MUT full"
+      ],
+      "without": []
+     }
+    },
+    {
+     "kind": "lit",
+     "refs": [
+      "chandler1986"
+     ],
+     "text": "MCC and PCC biotinylated subunits ran at about 75 and 72 kDa in mouse cells; at this gel's resolution they would merge into one band."
+    },
+    {
+     "kind": "lit",
+     "refs": [
+      "vanhove2008"
+     ],
+     "text": "PCC (72 kDa) and MCC (76 kDa) run as a doublet on streptavidin blots of fibroblasts, and lose their biotin when holocarboxylase synthetase is missing."
+    },
+    {
+     "kind": "lit",
+     "refs": [
+      "grant2019"
+     ],
+     "text": "In mouse tissue, ~75 and ~150 kDa bands appeared with the avidin conjugate alone, in every sample; the authors attribute them to MCC/PCC and PC but did not identify them."
+    },
+    {
+     "kind": "lit",
+     "refs": [
+      "ahmed2014"
+     ],
+     "text": "Background bands at about 72, 75 and 150 kDa are described as the usual signature of endogenous biotin in streptavidin westerns."
+    },
+    {
+     "kind": "lit",
+     "refs": [
+      "stratton2006"
+     ],
+     "text": "PCC activity is measured in blood lymphocytes: white cells carry these mitochondrial carboxylases."
+    }
+   ],
+   "summary": "Most likely the biotinylated α subunits of 3-methylcrotonyl-CoA carboxylase and propionyl-CoA carboxylase (about 75 and 72 kDa), running together as one band. Confidence is high that it is endogenously biotinylated and moderate that it is MCC/PCC, which rests on size and on these being the known biotinylated proteins of this size."
+  },
+  {
+   "kda": 65,
+   "lo": 62,
+   "hi": 68,
+   "kind": "odd",
+   "before": "Too faint to tell",
+   "needs": "Biotin-GPP only",
+   "dilution": "Fades",
+   "defect": "Similar",
+   "guess": "Blood protein labelled without the enzymes",
+   "evidence": [
+    {
+     "kind": "data",
+     "text": "Reaction drop-outs: 0.07-0.08 with no REP1 or no RabGGTase II, but 0.00-0.01 with no biotin-GPP.",
+     "lanes": {
+      "with": [
+       "G2:HET no REP1",
+       "G2:HET no RabGGTase"
+      ],
+      "without": [
+       "G2:HET no B-GPP",
+       "G2:MUT no B-GPP"
+      ]
+     }
+    },
+    {
+     "kind": "data",
+     "text": "Strep pull-down: too faint in every lane (≤0.02) to tell whether streptavidin pulls it down.",
+     "lanes": {
+      "with": [
+       "G1:MUT 1in10 not cleared"
+      ],
+      "without": [
+       "G1:MUT 1in2 bead eluate",
+       "G1:MUT 1in10 bead eluate"
+      ]
+     }
+    },
+    {
+     "kind": "data",
+     "text": "Frozen blood: 0.13 neat, 0.03 at 1 in 10, 0 at 1 in 50, so it comes from the blood.",
+     "lanes": {
+      "with": [
+       "G3:HET +CPI neat",
+       "G3:MUT +CPI neat"
+      ],
+      "without": [
+       "G3:HET +CPI 1in50",
+       "G3:MUT +CPI 1in50"
+      ]
+     }
+    },
+    {
+     "kind": "note",
+     "text": "Could be the lysate's own prenyltransferases, or labelling without an enzyme."
+    }
+   ],
+   "summary": "A blood protein that picks up the biotin label without the added enzymes, perhaps through the lysate's own prenyltransferases or non-enzymatic attachment. Confidence is low: it needs biotin-GPP and fades with dilution, but it is too faint on the pull-down gel to tell whether it was biotinylated beforehand."
+  },
+  {
+   "kda": 54,
+   "lo": 50,
+   "hi": 58,
+   "kind": "reagent",
+   "before": "No",
+   "needs": "RabGGTase + biotin-GPP",
+   "dilution": "Gets stronger",
+   "defect": "Same",
+   "guess": "From the reaction mix",
+   "evidence": [
+    {
+     "kind": "data",
+     "text": "Reaction drop-outs: 0.06-0.11 with the full reaction or without REP1; 0.00-0.01 without RabGGTase II; 0.02 without biotin-GPP.",
+     "lanes": {
+      "with": [
+       "G2:HET full",
+       "G2:HET no REP1"
+      ],
+      "without": [
+       "G2:HET no RabGGTase",
+       "G2:MUT no RabGGTase",
+       "G2:HET no B-GPP"
+      ]
+     }
+    },
+    {
+     "kind": "data",
+     "text": "Serial dilution: 0.04 at 1 in 5 rising to about 0.10 at 1 in 1000 and 1 in 10 000, in both genotypes.",
+     "lanes": {
+      "with": [
+       "G5:HET 1in1000",
+       "G5:HET 1in10000"
+      ],
+      "without": [
+       "G5:HET 1in5",
+       "G5:MUT 1in5"
+      ]
+     }
+    },
+    {
+     "kind": "data",
+     "text": "Strep pull-down: absent from the bead eluates and unchanged by clearing.",
+     "lanes": {
+      "with": [
+       "G1:MUT 1in10 not cleared",
+       "G1:MUT 1in10 Strep-cleared"
+      ],
+      "without": [
+       "G1:MUT 1in2 bead eluate",
+       "G1:MUT 1in10 bead eluate"
+      ]
+     }
+    },
+    {
+     "kind": "note",
+     "text": "The lysate seems to suppress it: it is weakest where there is most blood. Possibly a labelled recombinant protein or contaminant."
+    }
+   ],
+   "summary": "Probably labelled reagent, a recombinant protein or contaminant in the reaction mix that RabGGTase II attaches biotin-GPP to. Confidence is moderate: it needs the enzyme and biotin-GPP but not REP1, and it gets stronger rather than weaker as the blood is diluted away, but a no-lysate control is needed to confirm it."
+  },
+  {
+   "kda": 42,
+   "lo": 39,
+   "hi": 45,
+   "kind": "reaction",
+   "before": "No",
+   "needs": "Biotin-GPP; enzymes partly",
+   "dilution": "Flat",
+   "defect": "Similar",
+   "guess": "Unknown product",
+   "evidence": [
+    {
+     "kind": "data",
+     "text": "Reaction drop-outs (no defect): 0.15 full, 0.06 without REP1, 0.05 without RabGGTase II, 0.00 without biotin-GPP.",
+     "lanes": {
+      "with": [
+       "G2:HET full"
+      ],
+      "without": [
+       "G2:HET no B-GPP"
+      ]
+     }
+    },
+    {
+     "kind": "data",
+     "text": "Frozen blood: 0.02-0.05 across neat, 1 in 10 and 1 in 50.",
+     "lanes": {
+      "with": [
+       "G3:HET +CPI neat",
+       "G3:HET +CPI 1in10",
+       "G3:HET +CPI 1in50"
+      ],
+      "without": []
+     }
+    },
+    {
+     "kind": "data",
+     "text": "Strep pull-down: not in the eluates; 0.20 vs 0.17 before and after clearing.",
+     "lanes": {
+      "with": [
+       "G1:MUT 1in10 not cleared",
+       "G1:MUT 1in10 Strep-cleared"
+      ],
+      "without": [
+       "G1:MUT 1in2 bead eluate",
+       "G1:MUT 1in10 bead eluate"
+      ]
+     }
+    }
+   ],
+   "summary": "An unidentified product of the labelling reaction that depends on biotin-GPP and partly on the added enzymes. Confidence in any identity is low, and because it changes little between genotypes or with dilution it is unlikely to report the prenylation defect."
+  },
+  {
+   "kda": 30,
+   "lo": 28,
+   "hi": 32,
+   "kind": "reaction",
+   "before": "No",
+   "needs": "RabGGTase; REP1, biotin-GPP unclear",
+   "dilution": "Fades",
+   "defect": "Can't tell: covered by ~25",
+   "guess": "Second substrate or Rab complex",
+   "evidence": [
+    {
+     "kind": "data",
+     "text": "Reaction drop-outs (defect): RabGGTase II is needed (0.005 without it), but small peaks remain without REP1 (0.031) or biotin-GPP (0.030); the full-reaction lane can't be read, because the saturated ~25 band spreads into this window.",
+     "lanes": {
+      "with": [
+       "G2:MUT full"
+      ],
+      "without": [
+       "G2:MUT no REP1",
+       "G2:MUT no RabGGTase",
+       "G2:MUT no B-GPP"
+      ]
+     }
+    },
+    {
+     "kind": "data",
+     "text": "Defect vs no defect: in defect lanes this window sits on the saturated ~25 band's tail, so no separate peak can be read; without the defect it is a clear peak (0.06 on the drop-out gel). The earlier '2-5x higher with the defect' reading isn't supported.",
+     "lanes": {
+      "with": [
+       "G2:MUT full",
+       "G4:MUT 1x RBC lysis",
+       "G3:MUT +CPI neat"
+      ],
+      "without": [
+       "G2:HET full",
+       "G4:HET 1x RBC lysis",
+       "G3:HET +CPI neat"
+      ]
+     }
+    },
+    {
+     "kind": "data",
+     "text": "Strep pull-down: absent from the eluates; in the reacted lysates it is covered by the saturated ~25 band (0.75-0.91), so the effect of clearing can't be read.",
+     "lanes": {
+      "with": [
+       "G1:MUT 1in10 not cleared",
+       "G1:MUT 1in10 Strep-cleared"
+      ],
+      "without": [
+       "G1:MUT 1in2 bead eluate",
+       "G1:MUT 1in10 bead eluate"
+      ]
+     }
+    },
+    {
+     "kind": "note",
+     "text": "Could be a second substrate (a larger Rab?) or an SDS-resistant Rab complex."
+    }
+   ],
+   "summary": "A reaction product that clearly needs RabGGTase II and is a clean peak in samples without the defect; in defect samples it is buried under the saturated ~25 kDa band, so whether the defect changes it can't be read. Confidence is low: small peaks without REP1 or biotin-GPP mean even its dependence on the full reaction is uncertain."
+  },
+  {
+   "kda": 25,
+   "lo": 22.5,
+   "hi": 27.5,
+   "kind": "rab",
+   "before": "No",
+   "needs": "RabGGTase + biotin-GPP; REP1 partly",
+   "dilution": "Fades",
+   "defect": "Much higher with defect",
+   "guess": "Unprenylated Rabs",
+   "guess_refs": [
+    "jurczyluk2016",
+    "munoz2019"
+   ],
+   "evidence": [
+    {
+     "kind": "data",
+     "text": "Reaction drop-outs: 0.62 (no defect) and saturated (defect) with the full reaction; nearly gone without biotin-GPP (0.004); without RabGGTase II, 0.008 (no defect) but a small peak of 0.07 in the defect lysate, which may be the lysate's own enzyme; without REP1, faint (no defect) but 0.37 (defect).",
+     "lanes": {
+      "with": [
+       "G2:HET full",
+       "G2:MUT full",
+       "G2:MUT no REP1"
+      ],
+      "without": [
+       "G2:HET no REP1",
+       "G2:HET no RabGGTase",
+       "G2:MUT no RabGGTase",
+       "G2:HET no B-GPP",
+       "G2:MUT no B-GPP"
+      ]
+     }
+    },
+    {
+     "kind": "data",
+     "text": "Defect lanes are saturated on every gel at the higher lysate amounts; serial dilution 1 in 100: 0.21 (defect) vs 0.01 (no defect).",
+     "lanes": {
+      "with": [
+       "G5:MUT 1in100"
+      ],
+      "without": [
+       "G5:HET 1in100"
+      ]
+     }
+    },
+    {
+     "kind": "data",
+     "text": "Strep pull-down: absent from the bead eluates, so made in the reaction.",
+     "lanes": {
+      "with": [
+       "G1:MUT 1in10 not cleared"
+      ],
+      "without": [
+       "G1:MUT 1in2 bead eluate",
+       "G1:MUT 1in10 bead eluate"
+      ]
+     }
+    },
+    {
+     "kind": "lit",
+     "refs": [
+      "jurczyluk2016"
+     ],
+     "text": "The same kind of in vitro prenylation assay, with mass spectrometry, detected unprenylated Rab GTPases (including Rab7A, Rab14 and Rab1A) accumulating in cells from patients with mevalonate kinase deficiency."
+    },
+    {
+     "kind": "lit",
+     "refs": [
+      "munoz2019"
+     ],
+     "text": "In blood mononuclear cells from six patients with mevalonate kinase deficiency, the assay showed a clear build-up of unprenylated Rab proteins compared with heterozygous carriers and healthy controls."
+    },
+    {
+     "kind": "note",
+     "text": "Which Rabs make up this band in mouse blood is not checked against the literature; Rab27 was suggested earlier from size only."
+    },
+    {
+     "kind": "note",
+     "text": "Higher with the defect could mean more unprenylated Rab, or simply more Rab in the sample: nothing here measures total Rab. The lysate has its own REP, which is why leaving out REP1 only partly removes the band."
+    }
+   ],
+   "summary": "Most likely unprenylated Rab GTPases labelled in the reaction, the signal this assay is designed to measure, and much stronger in blood with the prenylation defect. Confidence is high that these are Rab-like reaction products and moderate about why they differ, because more total Rab in the defect samples would give the same result as more unprenylated Rab."
+  },
+  {
+   "kda": 19,
+   "lo": 18,
+   "hi": 20.5,
+   "kind": "rab",
+   "before": "No",
+   "needs": "Unclear",
+   "dilution": "Fades",
+   "defect": "Defect only, no own peak",
+   "guess": "Tail of ~25, or a small substrate",
+   "evidence": [
+    {
+     "kind": "data",
+     "text": "Reaction drop-outs (defect): the full-reaction lane can't be read (signal 0.49 but no separate peak, on the saturated ~25 band's tail); every drop-out lane is faint (0.017).",
+     "lanes": {
+      "with": [
+       "G2:MUT full"
+      ],
+      "without": [
+       "G2:MUT no REP1",
+       "G2:MUT no RabGGTase",
+       "G2:MUT no B-GPP"
+      ]
+     }
+    },
+    {
+     "kind": "data",
+     "text": "Defect vs no defect: nothing in the no-defect lanes (0.004); in defect lanes there is signal (0.06-0.23) but no separate peak, so it may be the ~25 band's tail rather than a band of its own.",
+     "lanes": {
+      "with": [
+       "G5:MUT 1in5",
+       "G3:MUT +CPI neat"
+      ],
+      "without": [
+       "G5:HET 1in5",
+       "G3:HET +CPI neat"
+      ]
+     }
+    },
+    {
+     "kind": "data",
+     "text": "Strep pull-down: a separate peak in the reacted lysate (0.16), one of only two lanes where it resolves; absent from the eluates.",
+     "lanes": {
+      "with": [
+       "G1:MUT 1in10 not cleared"
+      ],
+      "without": [
+       "G1:MUT 1in2 bead eluate",
+       "G1:MUT 1in10 bead eluate"
+      ]
+     }
+    },
+    {
+     "kind": "note",
+     "text": "Could be a smaller Rab-like substrate, or a fragment of the ~25 band."
+    }
+   ],
+   "summary": "Possibly not a band of its own: in most defect lanes this region carries signal but no separate peak, consistent with the lower tail of the saturated ~25 kDa Rab band. Confidence is low; it resolves as a distinct peak in only two of 38 lanes, so defect samples would need lighter loading to tell."
+  },
+  {
+   "kda": 15,
+   "lo": 14,
+   "hi": 16.5,
+   "kind": "reaction",
+   "before": "No",
+   "needs": "Unclear",
+   "dilution": "Fades",
+   "defect": "More with defect, no own peak",
+   "guess": "Unknown; maybe smear",
+   "evidence": [
+    {
+     "kind": "data",
+     "text": "Reaction drop-outs: 0.04-0.07 in every lane, a separate peak only in the no-defect full reaction; too flat to say what it needs.",
+     "lanes": {
+      "with": [
+       "G2:HET full",
+       "G2:MUT full"
+      ],
+      "without": []
+     }
+    },
+    {
+     "kind": "data",
+     "text": "Defect vs no defect: more signal with the defect (0.12-0.23 vs 0.02-0.03), but no separate peak in those lanes, so it may be smear from the saturated ~25 band.",
+     "lanes": {
+      "with": [
+       "G5:MUT 1in5",
+       "G3:MUT +CPI neat"
+      ],
+      "without": [
+       "G5:HET 1in5",
+       "G3:HET +CPI neat"
+      ]
+     }
+    }
+   ],
+   "summary": "A small labelled species, or smear below the saturated Rab band, seen mostly in samples with the defect. Confidence is low: it forms a separate peak in only seven lanes and in none of the heavily saturated defect lanes, so it can't be told apart from smear there."
+  }
+ ]
+}
