@@ -2,9 +2,10 @@
 (() => {
   "use strict";
 
+  // Okabe-Ito, ordered so the faint yellow and the black come last; black becomes light grey on a dark page
   const LANE_HUES = {
-    light: ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"],
-    dark: ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#0ca30c", "#9085e9", "#e66767"],
+    light: ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#F0E442", "#000000"],
+    dark: ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#F0E442", "#BBBBBB"],
   };
   // line style marks what was done differently to a lane (as in pseudochrom.py)
   const DASHES = [["no CPI", "dash"], ["vehicle", "dash"], ["bead eluate", "dash"], ["−REP1", "dash"],
@@ -287,8 +288,8 @@
       const st = on ? laneStyle(l) : null;
       const rect = sv("rect", {
         class: "lanebox", x: l.cols[0], y: r0, width: l.cols[1] - l.cols[0], height: r1 - r0,
-        fill: on ? st.color : "#2a78d6", "fill-opacity": on ? 0.18 : 0.06,
-        stroke: on ? st.color : "#2a78d6", "stroke-opacity": on ? 1 : 0.35, "stroke-width": Math.max(1.5, g.width / (on ? 300 : 700)),
+        fill: on ? st.color : "#888888", "fill-opacity": on ? 0.18 : 0.06,
+        stroke: on ? st.color : "#888888", "stroke-opacity": on ? 1 : 0.35, "stroke-width": Math.max(1.5, g.width / (on ? 300 : 700)),
       });
       const title = sv("title");
       title.textContent = `${l.legend}${l.detail ? " · " + l.detail : ""}\n(lane "${l.name}") – click to ${on ? "remove" : "add"}`;
@@ -392,7 +393,7 @@
         strips.append(el("div", { class: "sbs-strip" }, el("div", { class: "sbs-label" }, el("span", { class: cls }, label)), sw, c));
         draw(c);
       };
-      mk("Ladder", "ladder", cssVar("--ladder"), "solid",
+      mk("Ladder", "ladder", cssVar("--text-2"), "solid",
         (c) => drawStrip(c, imgs[gi], g, null, g.ladder.x[0], g.ladder.x[1]), `${g.name}: ladder`);
       for (const l of lanes.filter((x) => x.gel === gid)) {
         const st = laneStyle(l);
