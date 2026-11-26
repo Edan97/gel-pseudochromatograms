@@ -63,6 +63,10 @@
     <div class="card">
       <div class="gel-head">
         <h2>Gel images</h2>
+        <div class="seg" id="pick-mode" role="group" aria-label="What a click on a gel picks">
+          <button data-pick="band" class="on">Click picks a band</button>
+          <button data-pick="lane">Click picks a lane</button>
+        </div>
         <div class="seg" id="gel-mode" role="group" aria-label="Gel view">
           <button data-mode="whole" class="on">Whole gels</button>
           <button data-mode="sbs">Selected lanes side by side</button>
@@ -70,7 +74,7 @@
       </div>
       <div id="whole-gel">
       <div id="gel-tabs" class="tabs" role="tablist"></div>
-      <p class="muted small">Click a lane to add or remove it. Shaded columns are the pixels averaged into each trace; orange ticks are the ladder bands as found. Hovering over the plot marks that size in each selected lane of this gel.</p>
+      <p class="muted small">Click a band on the gel to pick it: it's marked on every lane (✓ seen, ✗ not seen), on the plot and in the band table. Switch to "Click picks a lane" to add or remove lanes instead. Shaded columns are the pixels averaged into each trace; orange ticks are the ladder bands as found. Hovering over the plot marks that size on the gel.</p>
       <div id="gel-view" class="gel-view"></div>
       <details class="gel-side">
         <summary>Notebook notes for this gel</summary>
@@ -78,7 +82,7 @@
       </details>
       </div>
       <div id="sbs-gel" hidden>
-        <p class="muted small">Each selected lane cut from its gel beside that gel's ladder, every strip stretched onto the same kDa scale so sizes line up across gels. Contrast is each image's own. Hovering over the plot marks that size across the strips.</p>
+        <p class="muted small">Each selected lane cut from its gel beside that gel's ladder, every strip stretched onto the same kDa scale so sizes line up across gels. Contrast is each image's own. Click a strip to pick the band there; with a band picked, ✓ / ✗ under each strip says whether it's seen. Hovering over the plot marks that size across the strips.</p>
         <div id="sbs" class="sbs"></div>
       </div>
     </div>
@@ -87,7 +91,7 @@
       <h2>Bands</h2>
       <p class="muted small" id="bands-caption"></p>
       <div class="table-scroll"><table id="bands-table" class="tbl"></table></div>
-      <p class="muted small">Click a band to highlight it on the plot and the side-by-side strips; click it again to clear.</p>
+      <p class="muted small">Click a row to highlight that band on the plot and the gels (click again to clear); clicking a band on the plot or a gel picks it too. "Show evidence" loads the lanes behind the claim onto the plot and the side-by-side strips, and lists every lane where the band is seen and where it isn't.</p>
       <div id="band-refs-wrap" hidden>
         <h3 class="refs-head">References</h3>
         <ol id="band-refs" class="refs"></ol>

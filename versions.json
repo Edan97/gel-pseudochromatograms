@@ -8,5 +8,10 @@
     "id": "v2",
     "date": "2026-11-26",
     "note": "Band table with footnoted literature and per-band evidence"
+  },
+  {
+    "id": "v3",
+    "date": "2026-11-26",
+    "note": "Pick a band on the gels; Show evidence puts the lanes for and against each claim on the plot and gels"
   }
 ]

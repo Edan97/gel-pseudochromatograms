@@ -40,6 +40,9 @@
     slots: new Map(),       // lane id -> colour slot (each-lane colouring), kept while selected
     geno: "all", colourBy: "defect", ymax: "auto", showBands: true,
     gel: null, gelMode: "whole", activeBand: null, hoverKda: null,
+    pickMode: "band",        // what a click on a gel image picks: a band (default) or a lane
+    picked: null,            // a band picked on a gel that the band table doesn't have: {kda, lo, hi}
+    openEvidence: new Set(), // band-table rows whose evidence is open (index, or "picked")
     imgs: new Map(),        // image src -> Promise<HTMLImageElement>
   };
 
@@ -59,7 +62,7 @@
     const p = new URLSearchParams(location.hash.slice(1));
     return {
       v: p.get("v"), l: p.get("l") ? p.get("l").split("|").filter(Boolean) : null,
-      c: p.get("c"), g: p.get("g"), y: p.get("y"), gv: p.get("gv"),
+      c: p.get("c"), g: p.get("g"), y: p.get("y"), gv: p.get("gv"), pm: p.get("pm"), b: p.get("b"),
     };
   }
   function writeHash() {
@@ -70,6 +73,9 @@
     if (state.ymax !== "auto") p.set("y", state.ymax);
     if (state.gel) p.set("g", state.gel);
     if (state.gelMode === "sbs") p.set("gv", "sbs");
+    if (state.pickMode === "lane") p.set("pm", "lane");
+    const b = curBand();
+    if (b) p.set("b", String(b.kda));
     history.replaceState(null, "", "#" + p.toString());
   }
 
@@ -116,7 +122,98 @@
     renderPlot();
     renderGel();
     renderLaneTable();
+    if (state.bands) renderBandRows();
     writeHash();
+  }
+
+  // ------------------------------------------------------------------ the band in focus
+
+  // a row of the band table, or a band picked on a gel that the table doesn't have
+  function curBand() {
+    if (state.activeBand !== null && state.bands) return state.bands.bands[state.activeBand];
+    return state.picked;
+  }
+  // is the band there in this lane? a called peak inside the band's window, or almost nothing there
+  function presence(lane, b) {
+    const k = state.data.kda;
+    let h = -1, any = false;
+    for (let i = 0; i < k.length; i++) {
+      if (k[i] >= b.lo && k[i] <= b.hi && lane.y[i] !== null) { any = true; if (lane.y[i] > h) h = lane.y[i]; }
+    }
+    if (!any) return { state: "na", h: null };
+    const peak = lane.peaks.some((p) => p.kda >= b.lo && p.kda <= b.hi);
+    if (peak && h >= 0.02) return { state: "seen", h };
+    if (h < 0.015) return { state: "absent", h };
+    return { state: "unclear", h };
+  }
+  const GLYPH = { seen: "✓", absent: "✗", unclear: "?", na: "–" };
+  const PRES_LABEL = { seen: "band seen", absent: "band not seen", unclear: "unclear (weak, or on the side of a bigger band)", na: "outside this gel's range" };
+
+  function setBand(idx, picked = null) {
+    state.activeBand = idx;
+    state.picked = idx === null ? picked : null;
+    if (!state.picked) state.openEvidence.delete("picked");
+    renderPlot();
+    renderGel();
+    if (state.bands) renderBandRows();
+    writeHash();
+  }
+
+  function kdaForRow(g, lane, row) {
+    const rLad = lane ? lane.map[0] * row + lane.map[1] : row;
+    const { rows, logkda } = g.cal;
+    for (let i = 1; i < rows.length; i++) {
+      if (rLad >= rows[i - 1] && rLad <= rows[i]) {
+        const f = (rLad - rows[i - 1]) / (rows[i] - rows[i - 1] || 1);
+        return 10 ** (logkda[i - 1] + f * (logkda[i] - logkda[i - 1]));
+      }
+    }
+    return null;
+  }
+
+  // a click at some size: the table's band there, else the nearest peak in that lane, else just that size
+  function pickBandAt(kda, lane) {
+    if (!kda) return;
+    const B = state.bands ? state.bands.bands : [];
+    const inTable = (k) => B.findIndex((b) => k >= b.lo && k <= b.hi);
+    let i = inTable(kda);
+    if (i >= 0) { setBand(i); return; }
+    let k = kda;
+    if (lane) {
+      const near = lane.peaks.filter((p) => Math.abs(Math.log10(p.kda / kda)) < 0.035)
+        .sort((a, b) => Math.abs(Math.log10(a.kda / kda)) - Math.abs(Math.log10(b.kda / kda)))[0];
+      if (near) k = near.kda;
+    }
+    i = inTable(k);
+    if (i >= 0) { setBand(i); return; }
+    const r = k < 100 ? Math.round(k * 10) / 10 : Math.round(k);
+    setBand(null, { kda: r, lo: k / 1.045, hi: k * 1.045 });
+  }
+
+  // the lanes that show a band's evidence: those its claims name, or for a picked band,
+  // the clearest lanes with it and lanes on the same gels without it
+  function evidenceLanes(b) {
+    const named = (b.evidence || []).filter((e) => e.lanes).flatMap((e) => [...e.lanes.with, ...e.lanes.without]);
+    if (named.length) return [...new Set(named)];
+    const all = state.data.lanes.map((l) => ({ l, p: presence(l, b) }));
+    const seen = all.filter((x) => x.p.state === "seen").sort((a, c) => c.p.h - a.p.h).slice(0, 6).map((x) => x.l);
+    const gels = new Set(seen.map((l) => l.gel));
+    const absent = all.filter((x) => x.p.state === "absent").sort((a, c) => gels.has(c.l.gel) - gels.has(a.l.gel)).slice(0, 4).map((x) => x.l);
+    return [...seen, ...absent].map((l) => l.id);
+  }
+
+  function showEvidence(key) {
+    if (state.openEvidence.has(key)) { state.openEvidence.delete(key); renderBandRows(); return; }
+    const b = key === "picked" ? state.picked : state.bands.bands[key];
+    state.openEvidence.add(key);
+    if (key !== "picked") { state.activeBand = key; state.picked = null; }
+    selectOnly(evidenceLanes(b));
+    state.gelMode = "sbs";
+    changed();
+  }
+  function selectOnly(ids) {
+    state.selected.slice().forEach((id) => toggle(id, false));
+    ids.forEach((id) => toggle(id, true));
   }
 
   // ------------------------------------------------------------------ lane list
@@ -154,12 +251,15 @@
   // ------------------------------------------------------------------ plot
 
   function bandShapes() {
-    if (!state.showBands || !state.bands) return [];
-    return state.bands.bands.map((b, i) => ({
-      type: "rect", xref: "x", yref: "paper", x0: b.lo, x1: b.hi, y0: 0, y1: 1,
-      fillcolor: i === state.activeBand ? cssVar("--zone-hi") : cssVar("--zone"), layer: "below",
-      line: i === state.activeBand ? { width: 1, color: cssVar("--ladder"), dash: "dot" } : { width: 0 },
-    }));
+    const out = [];
+    const shape = (b, on) => ({
+      type: "rect", xref: "x", yref: "paper", x0: b.lo, x1: b.hi, y0: 0, y1: 1, layer: "below",
+      fillcolor: on ? cssVar("--zone-hi") : cssVar("--zone"),
+      line: on ? { width: 1, color: cssVar("--ladder"), dash: "dot" } : { width: 0 },
+    });
+    if (state.bands) state.bands.bands.forEach((b, i) => { const on = i === state.activeBand; if (state.showBands || on) out.push(shape(b, on)); });
+    if (state.picked) out.push(shape(state.picked, true));
+    return out;
   }
   function bandLabels() {
     if (!state.showBands || !state.bands || $("#plot").clientWidth < 600) return [];
@@ -213,7 +313,10 @@
       plot._hooked = true;
       plot.on("plotly_hover", (ev) => { state.hoverKda = ev.points?.[0]?.x ?? null; drawHoverMarks(); });
       plot.on("plotly_unhover", () => { state.hoverKda = null; drawHoverMarks(); });
-      plot.on("plotly_doubleclick", () => { state.activeBand = null; renderBandRows(); });
+      plot.on("plotly_click", (ev) => {
+        const pt = ev.points?.[0];
+        if (state.pickMode === "band" && pt) pickBandAt(pt.x, laneById(state.selected[pt.curveNumber]));
+      });
     }
     renderLegend(lanes);
   }
@@ -294,9 +397,29 @@
       const title = sv("title");
       title.textContent = `${l.legend}${l.detail ? " · " + l.detail : ""}\n(lane "${l.name}") – click to ${on ? "remove" : "add"}`;
       rect.append(title);
-      rect.addEventListener("click", () => { toggle(l.id); changed(); });
+      rect.addEventListener("click", (e) => { if (state.pickMode !== "lane") return; e.stopPropagation(); toggle(l.id); changed(); });
       svg.append(rect);
     }
+    const band = curBand();
+    if (band) {
+      for (const l of lanes) {
+        const y1 = rowForKda(g, l, band.hi), y2 = rowForKda(g, l, band.lo);
+        if (y1 === null || y2 === null) continue;
+        const pres = presence(l, band);
+        const w = l.cols[1] - l.cols[0], pad = w * 0.35;
+        svg.append(sv("rect", { x: l.cols[0] - pad, y: y1, width: w + 2 * pad, height: Math.max(2, y2 - y1), fill: cssVar("--zone-hi"), stroke: cssVar("--ladder"), "stroke-width": Math.max(1.2, g.width / 700), "stroke-dasharray": "4 3", "pointer-events": "none" }));
+        const t = sv("text", { x: (l.cols[0] + l.cols[1]) / 2, y: y1 - fs * 0.35, "text-anchor": "middle", "font-size": fs * 1.1, "font-weight": 700, fill: pres.state === "seen" ? "#006b47" : pres.state === "absent" ? "#a33c00" : "#444", "paint-order": "stroke", stroke: "#fff", "stroke-width": fs / 3.5, "pointer-events": "none" });
+        t.textContent = GLYPH[pres.state];
+        svg.append(t);
+      }
+    }
+    svg.style.cursor = state.pickMode === "band" ? "crosshair" : "";
+    svg.addEventListener("click", (e) => {
+      if (state.pickMode !== "band") return;
+      const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(svg.getScreenCTM().inverse());
+      const lane = lanes.find((l) => { const w = l.cols[1] - l.cols[0]; return pt.x >= l.cols[0] - w * 0.35 && pt.x <= l.cols[1] + w * 0.35; });
+      pickBandAt(kdaForRow(g, lane || null, pt.y), lane || null);
+    });
     svg.append(sv("g", { id: "hover-marks" }));
     view.append(svg);
     drawHoverMarks();
@@ -385,12 +508,20 @@
     order.forEach((gid, gi) => {
       const g = gelById(gid);
       const strips = el("div", { class: "sbs-strips" });
-      const mk = (label, cls, colour, dash, draw, tip) => {
+      const band = curBand();
+      const mk = (label, cls, colour, dash, draw, tip, lane) => {
         const c = el("canvas", { title: tip });
+        c.addEventListener("click", (e) => { if (state.pickMode === "band") pickBandAt(sbsKda(e.offsetY), lane || null); });
+        if (state.pickMode === "band") c.style.cursor = "crosshair";
         const sw = el("div", { class: "sbs-swatch" });
         sw.style.borderTopColor = colour;
         sw.style.borderTopStyle = dash;
-        strips.append(el("div", { class: "sbs-strip" }, el("div", { class: "sbs-label" }, el("span", { class: cls }, label)), sw, c));
+        let pres = el("div", { class: "sbs-pres" });
+        if (band && lane) {
+          const p = presence(lane, band);
+          pres = el("div", { class: `sbs-pres pres-${p.state}`, title: `${PRES_LABEL[p.state]}${p.h !== null ? ` (height ${p.h.toFixed(2)})` : ""}` }, GLYPH[p.state]);
+        }
+        strips.append(el("div", { class: "sbs-strip" }, el("div", { class: "sbs-label" }, el("span", { class: cls }, label)), sw, c, pres));
         draw(c);
       };
       mk("Ladder", "ladder", cssVar("--text-2"), "solid",
@@ -402,7 +533,7 @@
         mk(l.legend.replace(/^Prenylation defect/, "Defect"), "", st.color,
           st.dash === "solid" ? "solid" : st.dash === "dot" ? "dotted" : "dashed",
           (c) => drawStrip(c, imgs[gi], g, l, mid - half, mid + half),
-          `${l.legend}${l.detail ? " · " + l.detail : ""}\n${g.name}, lane "${l.name}"`);
+          `${l.legend}${l.detail ? " · " + l.detail : ""}\n${g.name}, lane "${l.name}"`, l);
       }
       cols.push(el("div", { class: "sbs-group" }, el("div", { class: "sbs-group-head", title: `${g.name} (${g.when})` }, g.name), strips));
     });
@@ -419,8 +550,8 @@
     const c = box.querySelector("canvas");
     if (!c) return;
     const top = c.offsetTop, width = box.scrollWidth;
-    if (state.activeBand !== null && state.bands) {
-      const b = state.bands.bands[state.activeBand];
+    const b = curBand();
+    if (b) {
       const z = el("div", { class: "sbs-zone" });
       z.style.top = top + sbsY(b.hi) + "px";
       z.style.height = sbsY(b.lo) - sbsY(b.hi) + "px";
@@ -476,7 +607,7 @@
     const t = $("#bands-table");
     const B = state.bands;
     state.refNum = refNumbers();
-    state.openEvidence = new Set();
+    state.openEvidence.clear();
     $("#bands-caption").textContent = B.caption;
     t.replaceChildren(el("thead", {}, el("tr", {}, B.columns.map(([, h]) => el("th", {}, h)), el("th", {}, ""))), el("tbody"));
     renderBandRows();
@@ -485,39 +616,77 @@
     $("#band-refs").replaceChildren(...refs.map((r) => el("li", { id: `ref-${state.refNum.get(r.id)}`, value: state.refNum.get(r.id) },
       r.cite, " ", el("a", { href: `https://doi.org/${r.doi}`, target: "_blank", rel: "noopener" }, `doi:${r.doi}`))));
   }
+  function laneChip(id, pres) {
+    const l = laneById(id);
+    if (!l) return null;
+    const g = gelById(l.gel);
+    const on = state.selected.includes(id);
+    return el("button", {
+      class: `chip${on ? " on" : ""} pres-${pres.state}`,
+      title: `${l.legend}${l.detail ? " · " + l.detail : ""}: ${PRES_LABEL[pres.state]}${pres.h !== null ? ` (height ${pres.h.toFixed(2)})` : ""}. Click to ${on ? "remove it from" : "add it to"} the plot.`,
+      onclick: (e) => { e.stopPropagation(); toggle(id); changed(); },
+    }, el("b", {}, GLYPH[pres.state]), ` ${g.name}: ${l.name}`);
+  }
+
+  function evidencePanel(b, ncol) {
+    const items = (b.evidence || []).map((e) => {
+      const tag = el("span", { class: "ev-tag" }, e.kind === "data" ? "These gels" : e.kind === "lit" ? "Literature" : "Note");
+      const body = el("span", {}, e.text, e.refs?.length ? refLinks(e.refs) : null);
+      if (e.lanes) {
+        const grp = (label, ids) => ids.length ? el("span", { class: "chip-group" }, el("span", { class: "muted" }, label), ids.map((id) => laneChip(id, presence(laneById(id), b)))) : null;
+        body.append(el("div", { class: "chips" },
+          grp("Band expected:", e.lanes.with), grp("Weaker or absent:", e.lanes.without),
+          el("button", { class: "ev-show", onclick: (ev) => { ev.stopPropagation(); selectOnly([...e.lanes.with, ...e.lanes.without]); state.gelMode = "sbs"; changed(); } }, "Show only these")));
+      }
+      return el("li", { class: `ev ev-${e.kind}` }, tag, body);
+    });
+    // every lane, measured: where the band is and isn't
+    const all = state.data.lanes.map((l) => ({ l, p: presence(l, b) }));
+    const by = (st) => all.filter((x) => x.p.state === st).sort((a, c) => (c.p.h ?? 0) - (a.p.h ?? 0));
+    const groups = [["seen", "Seen in"], ["absent", "Not seen in"], ["unclear", "Unclear in"]].map(([st, label]) => {
+      const xs = by(st);
+      return xs.length ? el("div", { class: "chips" }, el("span", { class: "muted" }, `${label} ${xs.length}:`), xs.map((x) => laneChip(x.l.id, x.p))) : null;
+    });
+    items.push(el("li", { class: "ev ev-all" }, el("span", { class: "ev-tag" }, "Every lane"),
+      el("span", {}, `Measured in all ${all.length} lanes: ✓ a peak between ${fmtKda(b.lo)} and ${fmtKda(b.hi)} kDa; ✗ next to nothing there; ? weak, or on the side of a bigger band. Click a lane to add or remove it.`, groups)));
+    return el("tr", { class: "ev-row" }, el("td", { colspan: ncol }, el("ul", { class: "ev-list" }, items)));
+  }
+
   function renderBandRows() {
     const B = state.bands;
     const tb = $("#bands-table tbody");
+    if (!tb) return;
     const ncol = B.columns.length + 1;
     const rows = [];
+    const evBtn = (key) => {
+      const open = state.openEvidence.has(key);
+      return el("button", {
+        class: "ev-btn", "aria-expanded": open ? "true" : "false",
+        title: open ? "" : "Put the lanes behind this band on the plot and the gel strips, and list where it's seen",
+        onclick: (e) => { e.stopPropagation(); showEvidence(key); },
+      }, open ? "Hide evidence" : "Show evidence");
+    };
+    if (state.picked) {
+      const b = state.picked;
+      rows.push(el("tr", { class: "on picked" },
+        B.columns.map(([k]) => el("td", {}, k === "kda" ? el("b", {}, `~${fmtKda(b.kda)}`) : k === "kind" ? el("span", { class: "kind" }, "picked on a gel") : k === "guess" ? "Not in the table: no claim yet" : "—")),
+        el("td", {}, evBtn("picked"), " ", el("button", { class: "ev-btn", onclick: (e) => { e.stopPropagation(); setBand(null); } }, "Clear"))));
+      if (state.openEvidence.has("picked")) rows.push(evidencePanel(b, ncol));
+    }
     B.bands.forEach((b, i) => {
-      const open = state.openEvidence.has(i);
       const cells = B.columns.map(([k]) => el("td", {},
         k === "kda" ? el("b", {}, `~${b.kda}`)
           : k === "kind" ? el("span", { class: "kind" }, KIND_LABEL[b.kind] || b.kind)
           : k === "guess" ? [b.guess, b.guess_refs?.length ? refLinks(b.guess_refs) : null]
           : b[k]));
-      const btn = b.evidence?.length ? el("button", {
-        class: "ev-btn", "aria-expanded": open ? "true" : "false",
-        onclick: (e) => { e.stopPropagation(); open ? state.openEvidence.delete(i) : state.openEvidence.add(i); renderBandRows(); },
-      }, open ? "Hide evidence" : "Show evidence") : null;
-      rows.push(el("tr", { class: i === state.activeBand ? "on" : "", onclick: () => highlightBand(i) }, cells, el("td", {}, btn)));
-      if (open) {
-        const items = b.evidence.map((e) => el("li", { class: `ev ev-${e.kind}` },
-          el("span", { class: "ev-tag" }, e.kind === "data" ? "These gels" : e.kind === "lit" ? "Literature" : "Note"),
-          el("span", {}, e.text, e.refs?.length ? refLinks(e.refs) : null)));
-        rows.push(el("tr", { class: "ev-row" }, el("td", { colspan: ncol }, el("ul", { class: "ev-list" }, items))));
-      }
+      rows.push(el("tr", { class: i === state.activeBand ? "on" : "", onclick: () => highlightBand(i) }, cells, el("td", {}, evBtn(i))));
+      if (state.openEvidence.has(i)) rows.push(evidencePanel(b, ncol));
     });
     tb.replaceChildren(...rows);
   }
   // highlight a band everywhere without zooming: the whole profile stays in view
   function highlightBand(i) {
-    state.activeBand = state.activeBand === i ? null : i;
-    if (state.activeBand !== null && !state.showBands) { state.showBands = true; $("#show-bands").checked = true; renderPlot(); }
-    else Plotly.relayout("plot", { shapes: bandShapes() });
-    renderBandRows();
-    drawSbsMarks();
+    setBand(state.activeBand === i ? null : i);
   }
 
   function renderLaneTable() {
@@ -557,6 +726,15 @@
     const meta = state.versions.find((x) => x.id === v);
     $("#version-note").textContent = meta ? `${meta.date}${meta.note ? " · " + meta.note : ""}` : "";
     if (bands) renderBands();
+    state.activeBand = null;
+    state.picked = null;
+    const bk = parseFloat(state.startBand);
+    if (bk) {
+      const i = bands ? bands.bands.findIndex((b) => b.kda === bk) : -1;
+      if (i >= 0) state.activeBand = i;
+      else state.picked = { kda: bk, lo: bk / 1.045, hi: bk * 1.045 };
+    }
+    state.startBand = null;
     changed();
   }
 
@@ -571,6 +749,18 @@
     if (h.y === "1") state.ymax = "1";
     if (h.g) state.gel = h.g;
     if (h.gv === "sbs") state.gelMode = "sbs";
+    if (h.pm === "lane") state.pickMode = "lane";
+    state.startBand = h.b;
+    const pickBtns = document.querySelectorAll("#pick-mode button");
+    pickBtns.forEach((b) => {
+      b.classList.toggle("on", b.dataset.pick === state.pickMode);
+      b.addEventListener("click", () => {
+        state.pickMode = b.dataset.pick;
+        pickBtns.forEach((x) => x.classList.toggle("on", x === b));
+        renderGel();
+        writeHash();
+      });
+    });
     document.querySelectorAll("#gel-mode button").forEach((b) => b.addEventListener("click", () => {
       state.gelMode = b.dataset.mode;
       renderGel();
@@ -583,7 +773,7 @@
     $("#colour-by").addEventListener("change", (e) => { state.colourBy = e.target.value; changed(); });
     $("#ymax").addEventListener("change", (e) => { state.ymax = e.target.value; renderPlot(); writeHash(); });
     $("#show-bands").addEventListener("change", (e) => { state.showBands = e.target.checked; renderPlot(); });
-    $("#reset-zoom").addEventListener("click", () => { state.activeBand = null; renderBandRows(); renderPlot(false); });
+    $("#reset-zoom").addEventListener("click", () => renderPlot(false));
     $("#sel-none").addEventListener("click", () => { state.selected.slice().forEach((id) => toggle(id, false)); changed(); });
     $("#sel-shown").addEventListener("click", () => {
       state.data.lanes.filter((l) => state.geno === "all" || l.meta.genotype === state.geno).forEach((l) => toggle(l.id, true));
