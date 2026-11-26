@@ -23,5 +23,10 @@
     "id": "v5",
     "date": "2026-11-26",
     "note": "A two-sentence summary, with confidence, at the top of each band's evidence"
+  },
+  {
+    "id": "v6",
+    "date": "2026-11-26",
+    "note": "Claims checked lane by lane; uncertain lanes (covered by a neighbour, or faint) counted and shown first"
   }
 ]

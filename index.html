@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gel Pseudo-chromatograms</title>
 <meta name="description" content="Streptavidin blot lanes from an in vitro prenylation assay, as traces on a shared kDa axis, with the gel images beside them.">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 <script src="https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.35.2/plotly-basic.min.js"></script>
 </head>
 <body>
@@ -75,7 +75,7 @@
       </div>
       <div id="whole-gel">
       <div id="gel-tabs" class="tabs" role="tablist"></div>
-      <p class="muted small">Click a band on the gel to pick it: it's marked on every lane (✓ seen, ✗ not seen), on the plot and in the band table. Switch to "Click picks a lane" to add or remove lanes instead. Shaded columns are the pixels averaged into each trace; orange ticks are the ladder bands as found. Hovering over the plot marks that size on the gel.</p>
+      <p class="muted small">Click a band on the gel to pick it: it's marked on every lane (✓ seen, ✗ not seen, ≈ covered by a neighbour, ? faint), on the plot and in the band table. Switch to "Click picks a lane" to add or remove lanes instead. Shaded columns are the pixels averaged into each trace; orange ticks are the ladder bands as found. Hovering over the plot marks that size on the gel.</p>
       <div id="gel-view" class="gel-view"></div>
       <details class="gel-side">
         <summary>Notebook notes for this gel</summary>
@@ -83,7 +83,7 @@
       </details>
       </div>
       <div id="sbs-gel" hidden>
-        <p class="muted small">Each selected lane cut from its gel beside that gel's ladder, every strip stretched onto the same kDa scale so sizes line up across gels. Contrast is each image's own. Click a strip to pick the band there; with a band picked, ✓ / ✗ under each strip says whether it's seen. Hovering over the plot marks that size across the strips.</p>
+        <p class="muted small">Each selected lane cut from its gel beside that gel's ladder, every strip stretched onto the same kDa scale so sizes line up across gels. Contrast is each image's own. Click a strip to pick the band there; with a band picked, the mark under each strip says whether it's seen (✓), not seen (✗), covered by a neighbour (≈) or faint (?). Hovering over the plot marks that size across the strips.</p>
         <div id="sbs" class="sbs"></div>
       </div>
       <div id="closeup" class="closeup" hidden></div>
@@ -110,6 +110,6 @@
 <footer class="muted small">
   Made with <code>pseudochrom.py</code>: ladder (Precision Plus, 250–10 kDa) fitted per gel, lanes aligned on shared endogenous bands, background removed. Unpublished optimisation data.
 </footer>
-<script src="app.js?v=7"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>

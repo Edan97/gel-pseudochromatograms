@@ -24,7 +24,7 @@
       else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
       else if (v !== null && v !== undefined && v !== false) e.setAttribute(k, v === true ? "" : v);
     }
-    for (const k of kids.flat()) if (k !== null && k !== undefined) e.append(k.nodeType ? k : String(k));
+    for (const k of kids.flat(Infinity)) if (k !== null && k !== undefined) e.append(k.nodeType ? k : String(k));
     return e;
   };
   const SVG = "http://www.w3.org/2000/svg";
@@ -146,10 +146,30 @@
     const peak = lane.peaks.some((p) => p.kda >= b.lo && p.kda <= b.hi);
     if (peak && h >= 0.02) return { state: "seen", h };
     if (h < 0.015) return { state: "absent", h };
-    return { state: "unclear", h };
+    // two kinds of uncertain: plenty of signal but no peak of its own (a saturated neighbour or smear
+    // covers the window), or so little that it's at the edge of detection
+    if (!peak && h >= 0.04) return { state: "covered", h };
+    return { state: "faint", h };
   }
-  const GLYPH = { seen: "✓", absent: "✗", unclear: "?", na: "–" };
-  const PRES_LABEL = { seen: "band seen", absent: "band not seen", unclear: "unclear (weak, or on the side of a bigger band)", na: "outside this gel's range" };
+  const UNCERTAIN = new Set(["covered", "faint"]);
+  const GLYPH = { seen: "✓", absent: "✗", covered: "≈", faint: "?", na: "–" };
+  const PRES_LABEL = {
+    seen: "band seen", absent: "band not seen",
+    covered: "can't tell: signal here but no separate peak (a neighbouring band or smear covers it)",
+    faint: "can't tell: faint, at the edge of detection", na: "outside this gel's range",
+  };
+  // lanes that cut against a claim: expected but not seen, or expected weaker but seen
+  function misfits(b) {
+    const out = [];
+    for (const e of b.evidence || []) {
+      if (!e.lanes) continue;
+      for (const id of e.lanes.with) { const p = presence(laneById(id), b); if (p.state !== "seen") out.push({ id, p, expected: "with" }); }
+      for (const id of e.lanes.without) { const p = presence(laneById(id), b); if (p.state === "seen" || p.state === "covered") out.push({ id, p, expected: "without" }); }
+    }
+    const seen = new Set();
+    return out.filter((x) => !seen.has(x.id) && seen.add(x.id));
+  }
+  const uncertainCount = (b) => state.data.lanes.filter((l) => UNCERTAIN.has(presence(l, b).state)).length;
 
   function setBand(idx, picked = null) {
     state.activeBand = idx;
@@ -411,7 +431,7 @@
         const pres = presence(l, band);
         const w = l.cols[1] - l.cols[0], pad = w * 0.35;
         svg.append(sv("rect", { x: l.cols[0] - pad, y: y1, width: w + 2 * pad, height: Math.max(2, y2 - y1), fill: cssVar("--zone-hi"), stroke: cssVar("--ladder"), "stroke-width": Math.max(1.2, g.width / 700), "stroke-dasharray": "4 3", "pointer-events": "none" }));
-        const t = sv("text", { x: (l.cols[0] + l.cols[1]) / 2, y: y1 - fs * 0.35, "text-anchor": "middle", "font-size": fs * 1.1, "font-weight": 700, fill: pres.state === "seen" ? "#006b47" : pres.state === "absent" ? "#a33c00" : "#444", "paint-order": "stroke", stroke: "#fff", "stroke-width": fs / 3.5, "pointer-events": "none" });
+        const t = sv("text", { x: (l.cols[0] + l.cols[1]) / 2, y: y1 - fs * 0.35, "text-anchor": "middle", "font-size": fs * 1.1, "font-weight": 700, fill: pres.state === "seen" ? "#006b47" : pres.state === "absent" ? "#a33c00" : "#a0457a", "paint-order": "stroke", stroke: "#fff", "stroke-width": fs / 3.5, "pointer-events": "none" });
         t.textContent = GLYPH[pres.state];
         svg.append(t);
       }
@@ -662,7 +682,8 @@
     state.refNum = refNumbers();
     state.openEvidence.clear();
     $("#bands-caption").textContent = B.caption;
-    t.replaceChildren(el("thead", {}, el("tr", {}, B.columns.map(([, h]) => el("th", {}, h)), el("th", {}, ""))), el("tbody"));
+    if (!B.columns.some(([k]) => k === "uncertain")) B.columns.splice(B.columns.findIndex(([k]) => k === "guess"), 0, ["uncertain", "Uncertain"]);
+    t.replaceChildren(el("thead", {}, el("tr", {}, B.columns.map(([k, h]) => el("th", k === "uncertain" ? { title: "Lanes where the band can't be called either way: covered by a neighbour or smear, or faint" } : {}, h)), el("th", {}, ""))), el("tbody"));
     renderBandRows();
     const refs = (B.references || []).filter((r) => state.refNum.has(r.id)).sort((a, b) => state.refNum.get(a.id) - state.refNum.get(b.id));
     $("#band-refs-wrap").hidden = !refs.length;
@@ -697,16 +718,29 @@
     const all = state.data.lanes.map((l) => ({ l, p: presence(l, b) }));
     // a plain-language reading of the band first; a band picked on a gel has only its counts
     const n = (st) => all.filter((x) => x.p.state === st).length;
-    const summary = b.summary || `Not interpreted yet: this band isn't in the table. It is measured as seen in ${n("seen")} of ${all.length} lanes and absent from ${n("absent")}, with ${n("unclear")} unclear.`;
-    items.unshift(el("li", { class: "ev ev-summary" }, el("span", { class: "ev-tag" }, "Summary"), el("span", {}, summary)));
+    const summary = b.summary || `Not interpreted yet: this band isn't in the table. It is seen in ${n("seen")} of ${all.length} lanes and absent from ${n("absent")}; in ${n("covered") + n("faint")} it can't be called either way.`;
     const by = (st) => all.filter((x) => x.p.state === st).sort((a, c) => (c.p.h ?? 0) - (a.p.h ?? 0));
-    const groups = [["seen", "Seen in"], ["absent", "Not seen in"], ["unclear", "Unclear in"]].map(([st, label]) => {
-      const xs = by(st);
-      return xs.length ? el("div", { class: "chips" }, el("span", { class: "muted" }, `${label} ${xs.length}:`), xs.map((x) => laneChip(x.l.id, x.p))) : null;
-    });
+    const chipRow = (label, xs) => xs.length ? el("div", { class: "chips" }, el("span", { class: "muted" }, `${label} ${xs.length}:`), xs.map((x) => laneChip(x.l.id, x.p))) : null;
+    // what's uncertain comes straight after the summary: the lanes that cut against the claims, and the lanes that can't be called
+    const mis = misfits(b);
+    const unc = [...by("covered"), ...by("faint")];
+    const uncItems = [];
+    if (mis.length) uncItems.push(el("div", { class: "chips" }, el("span", { class: "muted" }, "Don't fit the claims below:"),
+      mis.map((x) => [laneChip(x.id, x.p), el("span", { class: "muted small" }, x.expected === "with" ? "(expected)" : "(expected weaker)")])));
+    uncItems.push(chipRow("Covered (≈), signal but no peak of its own:", by("covered")), chipRow("Faint (?), at the edge of detection:", by("faint")));
+    const head = [el("li", { class: "ev ev-summary" }, el("span", { class: "ev-tag" }, "Summary"), el("span", {}, summary))];
+    if (mis.length || unc.length) head.push(el("li", { class: "ev ev-uncertain" }, el("span", { class: "ev-tag" }, "Uncertain"),
+      el("span", {}, `Where this band can't be called, or the lanes disagree with the claim. ${unc.length} of ${all.length} lanes can't be called either way.`, uncItems)));
+    items.unshift(...head);
     items.push(el("li", { class: "ev ev-all" }, el("span", { class: "ev-tag" }, "Every lane"),
-      el("span", {}, `Measured in all ${all.length} lanes: ✓ a peak between ${fmtKda(b.lo)} and ${fmtKda(b.hi)} kDa; ✗ next to nothing there; ? weak, or on the side of a bigger band. Click a lane to add or remove it.`, groups)));
+      el("span", {}, `✓ a peak of its own between ${fmtKda(b.lo)} and ${fmtKda(b.hi)} kDa; ✗ next to nothing there; ≈ and ? are the uncertain lanes above. Click a lane to add or remove it.`,
+        chipRow("Seen in", by("seen")), chipRow("Not seen in", by("absent")))));
     return el("tr", { class: "ev-row" }, el("td", { colspan: ncol }, el("ul", { class: "ev-list" }, items)));
+  }
+
+  function uncCell(b) {
+    const n = uncertainCount(b), all = state.data.lanes.length;
+    return el("span", { class: `unc${n / all >= 0.3 ? " hi" : ""}`, title: `${n} of ${all} lanes can't be called either way` }, `${n}/${all}`);
   }
 
   function renderBandRows() {
@@ -726,7 +760,7 @@
     if (state.picked) {
       const b = state.picked;
       rows.push(el("tr", { class: "on picked" },
-        B.columns.map(([k]) => el("td", {}, k === "kda" ? el("b", {}, `~${fmtKda(b.kda)}`) : k === "kind" ? el("span", { class: "kind" }, "picked on a gel") : k === "guess" ? "Not in the table: no claim yet" : "—")),
+        B.columns.map(([k]) => el("td", {}, k === "kda" ? el("b", {}, `~${fmtKda(b.kda)}`) : k === "kind" ? el("span", { class: "kind" }, "picked on a gel") : k === "guess" ? "Not in the table: no claim yet" : k === "uncertain" ? uncCell(b) : "—")),
         el("td", {}, evBtn("picked"), " ", el("button", { class: "ev-btn", onclick: (e) => { e.stopPropagation(); setBand(null); } }, "Clear"))));
       if (state.openEvidence.has("picked")) rows.push(evidencePanel(b, ncol));
     }
@@ -735,6 +769,7 @@
         k === "kda" ? el("b", {}, `~${b.kda}`)
           : k === "kind" ? el("span", { class: "kind" }, KIND_LABEL[b.kind] || b.kind)
           : k === "guess" ? [b.guess, b.guess_refs?.length ? refLinks(b.guess_refs) : null]
+          : k === "uncertain" ? uncCell(b)
           : b[k]));
       rows.push(el("tr", { class: i === state.activeBand ? "on" : "", onclick: () => highlightBand(i) }, cells, el("td", {}, evBtn(i))));
       if (state.openEvidence.has(i)) rows.push(evidencePanel(b, ncol));
