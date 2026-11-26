@@ -695,6 +695,10 @@
     });
     // every lane, measured: where the band is and isn't
     const all = state.data.lanes.map((l) => ({ l, p: presence(l, b) }));
+    // a plain-language reading of the band first; a band picked on a gel has only its counts
+    const n = (st) => all.filter((x) => x.p.state === st).length;
+    const summary = b.summary || `Not interpreted yet: this band isn't in the table. It is measured as seen in ${n("seen")} of ${all.length} lanes and absent from ${n("absent")}, with ${n("unclear")} unclear.`;
+    items.unshift(el("li", { class: "ev ev-summary" }, el("span", { class: "ev-tag" }, "Summary"), el("span", {}, summary)));
     const by = (st) => all.filter((x) => x.p.state === st).sort((a, c) => (c.p.h ?? 0) - (a.p.h ?? 0));
     const groups = [["seen", "Seen in"], ["absent", "Not seen in"], ["unclear", "Unclear in"]].map(([st, label]) => {
       const xs = by(st);
